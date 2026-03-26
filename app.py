@@ -20,10 +20,10 @@ class SessionState:
 
 # Mock database for neighborhood average prices
 NEIGHBORHOOD_MARKET_DATA = {
-    "downtown": 500000,
-    "suburbs": 350000,
-    "uptown": 450000,
-    "riverside": 400000
+    "limassol": 4000,
+    "nicosia": 2500,
+    "paphos": 2800,
+    "larnaca": 2600
 }
 
 def fetch_market_data(location):
@@ -37,14 +37,14 @@ def fetch_market_data(location):
 
 def planner(description):
     """
-    Planner function that checks for 'price' and 'location'.
+    Planner function that checks for 'City in Cyprus' and 'Size in square meters'.
     Returns a list of missing required information.
     """
     missing = []
-    if "price" not in description.lower():
-        missing.append("price")
-    if "location" not in description.lower():
-        missing.append("location")
+    if "city" not in description.lower():
+        missing.append("City in Cyprus")
+    if "size" not in description.lower():
+        missing.append("Size in square meters")
     return missing
 
 def main():
@@ -79,7 +79,7 @@ def main():
             state.add_history("agent", f"Asked for {info_needed}")
             state.add_history("user", answer)
             
-            if info_needed == "location":
+            if info_needed == "City in Cyprus":
                 current_location = answer
 
         # 2. Tool Use: Fetch market data
