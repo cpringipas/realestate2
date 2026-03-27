@@ -31,7 +31,7 @@ class ValuationResult(typing.TypedDict):
     legal_disclaimer: str
     location_intelligence_summary: typing.Optional[str]
 
-def evaluate_valuation(session_memory, status_placeholder=None, retries=2, property_category="Residential", image=None, drive_times=None, title_deeds_status=None, vat_status=None):
+def evaluate_valuation(session_memory, status_placeholder=None, retries=2, property_category="Residential", image=None, drive_times=None, title_deeds_status=None, vat_status=None, structural_dampness=None, roof_waterproofing=None, mep_status=None, energy_efficiency=None, unauthorized_extensions=None, capex_estimate=0, developer_track_record=None, construction_stage=None, mep_climate_specs=None, solar_pv_system=None, planning_deviations=None, legal_doc_text=None, inspection_image=None):
     """
     Evaluator with Router Pattern: Uses Gemini to analyze session memory and optional image based on property category.
     """
@@ -57,6 +57,25 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
         "If the agent specifies a VAT status (5% or 19%), you MUST use that exact percentage for your final investment cost calculations and remove any Red Flags about VAT uncertainty."
     )
 
+    technical_assessment_instruction = (
+        "Technical & Structural Assessment: If the agent provides a Hard CapEx Estimate > 0, you MUST add that exact amount to the purchase price before calculating ROI. "
+        "You MUST evaluate the structural, MEP, and legal extension inputs. Heavily penalize the score for Concrete Spalling, Failing Roofs, or Major Unauthorized Extensions, "
+        "and explicitly mention these technical risks in the justification."
+    )
+
+    new_build_assessment_instruction = (
+        "New Build Assessment: If the property is a new build, heavily weight the Developer Track Record. "
+        "Penalize the score for Tier 3 or High Risk developers. If MEP Specs are 'Basic Provisions Only' or Solar is 'PV Provisions Only', "
+        "you MUST explicitly warn the user about hidden completion costs in the Red Flags. If Major Planning Deviations exist, flag an immediate Title Deed delay risk."
+    )
+
+    multimodal_instruction = (
+        "Multimodal Analysis: If an inspection photo is provided, you MUST perform a visual structural and technical analysis. "
+        "Override the user's condition rating if the photo shows severe damage (like spalling, dampness) or poor developer finishes. "
+        "If legal document text is provided, you MUST act as a Cyprus real estate lawyer. Scan the text for encumbrances, "
+        "VAT clauses, or Title Deed issues, and override any user assumptions with the hard legal facts found in the document."
+    )
+
     # Select System Instruction based on Category
     if property_category == "Land":
         system_instruction = (
@@ -67,7 +86,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
             "Aggressively hunt for 'Area market analysis' or 'Average price per m2' for land in the scraped text to fill market_avg_price_per_sqm. "
             "If missing, estimate it based on the city and zoning potential. "
             "If an image is provided, analyze the terrain, access roads, and neighboring structures to verify the description.\n"
-            + pr_law + "\n" + location_intel_instruction + "\n" + agent_override_instruction
+            + pr_law + "\n" + location_intel_instruction + "\n" + agent_override_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction
         )
     else: # Default to Residential or Commercial
         system_instruction = (
@@ -83,7 +102,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
             "If missing, estimate it based on the city and property type (e.g. Limassol apartments avg ~4500/sqm). "
             "If an image is provided, analyze the visual condition of the property. Brutally penalize the score if the image shows mold, "
             "deterioration, or poor maintenance that the marketing text tries to hide or downplay.\n"
-            + pr_law + "\n" + location_intel_instruction + "\n" + agent_override_instruction
+            + pr_law + "\n" + location_intel_instruction + "\n" + agent_override_instruction + "\n" + technical_assessment_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction
         )
 
     # Retrieve legal facts from RAG
@@ -105,6 +124,24 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     - VAT Status: {vat_status if vat_status else 'Unknown'}
     - Real-Time Drive Times: {drive_times if drive_times else 'No location verified for drive times.'}
     
+    Technical & Structural Assessment Details:
+    - Structural & Dampness: {structural_dampness}
+    - Roof Waterproofing: {roof_waterproofing}
+    - MEP Status: {mep_status}
+    - Energy Efficiency: {energy_efficiency}
+    - Unauthorized Extensions: {unauthorized_extensions}
+    - Agent Estimated CapEx / Repair Cost: €{capex_estimate}
+    
+    Technical Assessment (New Builds / Off-Plan) Details:
+    - Developer Track Record: {developer_track_record}
+    - Construction Stage: {construction_stage}
+    - MEP & Climate Specs: {mep_climate_specs}
+    - Solar / PV System: {solar_pv_system}
+    - Planning Deviations: {planning_deviations}
+    
+    Extracted Legal Document Text (if any):
+    {legal_doc_text if legal_doc_text else 'None provided'}
+
     Verified Cyprus Legal & Market Context:
     {legal_facts}
     
@@ -120,7 +157,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     6. Calculate listing_price_per_sqm (Total Price / Total Size).
     7. Extract or estimate market_avg_price_per_sqm for this specific area/type.
     8. Recommend the best investment strategy.
-    9. List any legal/financial red flags (VAT, Title Deeds, Zoning, etc.).
+    9. List any legal/financial red flags (VAT, Title Deeds, Zoning, etc. and Technical Risks).
     10. Generate a legal_disclaimer aggressively warning about Cyprus-specific risks.
     11. Determine PR eligibility status based on the Cyprus PR Immigration Law.
     12. Include a summary of drive times in 'location_intelligence_summary' and ensure they are used in the score and justification as instructed.
@@ -132,6 +169,8 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     
     if image:
         prompt_content.append(image)
+    if inspection_image:
+        prompt_content.append(inspection_image)
 
     # Step 1: Draft Generation
     draft_data = None

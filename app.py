@@ -8,6 +8,7 @@ import typing_extensions as typing
 from evaluator import evaluate_valuation
 import requests
 from PIL import Image
+import PyPDF2
 import pandas as pd
 
 # Load environment variables
@@ -186,12 +187,61 @@ def main():
         property_image = Image.open(uploaded_file)
         st.image(property_image, caption="Uploaded Property Image", use_container_width=True)
 
-    with st.expander("Agent On-the-Ground Assessment (Optional)"):
+    tab1, tab2, tab3 = st.tabs(['📋 Basic Overrides', '⚖️ Legal & Due Diligence', '🛠️ Technical Inspection'])
+
+    with tab1:
         condition_rating = st.slider("Condition & Finish Quality (1-10)", min_value=1, max_value=10, value=5)
         location_rating = st.slider("Street Vibe & Location Reality (1-10)", min_value=1, max_value=10, value=5)
         insider_knowledge = st.text_area("Agent Insider Knowledge (e.g., Seller motivation, hidden repair costs, realistic closing price)")
-        title_deeds_status = st.selectbox("Title Deeds Status", options=['Unknown (AI assumes risk)', 'Issued & Clean', 'Pending (Trusted Developer)', 'Share of Land Only'])
-        vat_status = st.selectbox("VAT Status", options=['Unknown', 'No VAT (Resale)', '5% (First Time Buyer)', '19% (Standard)'])
+        capex_estimate = st.number_input("Agent Estimated CapEx / Repair Cost (€)", min_value=0, value=0)
+
+    with tab2:
+        title_deeds_status = st.selectbox("Title Deeds Status", options=['🤖 Unknown / Let AI Assess', 'Issued & Clean', 'Pending (Trusted Developer)', 'Share of Land Only'])
+        vat_status = st.selectbox("VAT Status", options=['🤖 Unknown / Let AI Assess', 'No VAT (Resale)', '5% (First Time Buyer)', '19% (Standard)'])
+        
+        uploaded_pdf = st.file_uploader("Upload Legal Documents (Title Deeds, Contracts)", type=["pdf"])
+        legal_doc_text = None
+        if uploaded_pdf is not None:
+            try:
+                pdf_reader = PyPDF2.PdfReader(uploaded_pdf)
+                legal_doc_text = ""
+                for page in pdf_reader.pages:
+                    legal_doc_text += page.extract_text() + "\n"
+            except Exception as e:
+                st.error(f"Error reading PDF: {e}")
+
+    with tab3:
+        property_age = st.radio("Property Age", options=['🤖 Unknown', 'Resale', 'New Build / Off-Plan'])
+        
+        uploaded_inspection = st.file_uploader("Upload Inspection Photos (Damage, Finishes, Site Progress)", type=["png", "jpg", "jpeg"])
+        inspection_image = None
+        if uploaded_inspection is not None:
+            inspection_image = Image.open(uploaded_inspection)
+        
+        # Initialize variables to avoid NameError
+        structural_dampness = "🤖 Unknown / Let AI Assess"
+        roof_waterproofing = "🤖 Unknown / Let AI Assess"
+        mep_status = "🤖 Unknown / Let AI Assess"
+        energy_efficiency = "🤖 Unknown / Let AI Assess"
+        unauthorized_extensions = "🤖 Unknown / Let AI Assess"
+        developer_track_record = "🤖 Unknown / Let AI Assess"
+        construction_stage = "🤖 Unknown / Let AI Assess"
+        mep_climate_specs = "🤖 Unknown / Let AI Assess"
+        solar_pv_system = "🤖 Unknown / Let AI Assess"
+        planning_deviations = "🤖 Unknown / Let AI Assess"
+
+        if property_age == 'Resale':
+            structural_dampness = st.selectbox("Structural & Dampness", options=["🤖 Unknown / Let AI Assess", "Sound", "Minor Cracks", "Concrete Spalling", "Severe Damp"])
+            roof_waterproofing = st.selectbox("Roof Waterproofing", options=["🤖 Unknown / Let AI Assess", "Good", "Aging", "Failing"])
+            mep_status = st.selectbox("MEP Status", options=["🤖 Unknown / Let AI Assess", "Modernized", "Outdated", "Needs Full Replace"])
+            energy_efficiency = st.selectbox("Energy Efficiency", options=["🤖 Unknown / Let AI Assess", "High", "Medium", "Low"])
+            unauthorized_extensions = st.selectbox("Unauthorized Extensions", options=["🤖 Unknown / Let AI Assess", "None", "Minor", "Major"])
+        elif property_age == 'New Build / Off-Plan':
+            developer_track_record = st.selectbox("Developer Track Record", options=["🤖 Unknown / Let AI Assess", "Tier 1", "Tier 2", "Tier 3", "High Risk"])
+            construction_stage = st.selectbox("Construction Stage", options=["🤖 Unknown / Let AI Assess", "Pre-Permit", "Concrete Frame", "Plastering", "Finishes", "Completed"])
+            mep_climate_specs = st.selectbox("MEP & Climate Specs", options=["🤖 Unknown / Let AI Assess", "Premium VRV Included", "Standard Split Units Included", "Basic Provisions Only"])
+            solar_pv_system = st.selectbox("Solar / PV System", options=["🤖 Unknown / Let AI Assess", "Full PV Installed", "PV Provisions Only"])
+            planning_deviations = st.selectbox("Planning Deviations", options=["🤖 Unknown / Let AI Assess", "None", "Minor", "Major"])
 
     if "evaluate_clicked" not in st.session_state:
         st.session_state.evaluate_clicked = False
@@ -345,7 +395,20 @@ def main():
                     image=property_image, 
                     drive_times=drive_times,
                     title_deeds_status=title_deeds_status,
-                    vat_status=vat_status
+                    vat_status=vat_status,
+                    structural_dampness=structural_dampness,
+                    roof_waterproofing=roof_waterproofing,
+                    mep_status=mep_status,
+                    energy_efficiency=energy_efficiency,
+                    unauthorized_extensions=unauthorized_extensions,
+                    capex_estimate=capex_estimate,
+                    developer_track_record=developer_track_record,
+                    construction_stage=construction_stage,
+                    mep_climate_specs=mep_climate_specs,
+                    solar_pv_system=solar_pv_system,
+                    planning_deviations=planning_deviations,
+                    legal_doc_text=legal_doc_text,
+                    inspection_image=inspection_image
                 )
             
             # Clear all status messages
