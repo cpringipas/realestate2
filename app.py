@@ -33,6 +33,8 @@ class SessionState:
         self.condition_rating = 5
         self.location_rating = 5
         self.insider_knowledge = ""
+        self.title_deeds_status = "Unknown (AI assumes risk)"
+        self.vat_status = "Unknown"
 
     def add_history(self, role, message):
         self.history.append({"role": role, "message": message})
@@ -188,6 +190,8 @@ def main():
         condition_rating = st.slider("Condition & Finish Quality (1-10)", min_value=1, max_value=10, value=5)
         location_rating = st.slider("Street Vibe & Location Reality (1-10)", min_value=1, max_value=10, value=5)
         insider_knowledge = st.text_area("Agent Insider Knowledge (e.g., Seller motivation, hidden repair costs, realistic closing price)")
+        title_deeds_status = st.selectbox("Title Deeds Status", options=['Unknown (AI assumes risk)', 'Issued & Clean', 'Pending (Trusted Developer)', 'Share of Land Only'])
+        vat_status = st.selectbox("VAT Status", options=['Unknown', 'No VAT (Resale)', '5% (First Time Buyer)', '19% (Standard)'])
 
     if "evaluate_clicked" not in st.session_state:
         st.session_state.evaluate_clicked = False
@@ -315,6 +319,8 @@ def main():
             state.condition_rating = condition_rating
             state.location_rating = location_rating
             state.insider_knowledge = insider_knowledge
+            state.title_deeds_status = title_deeds_status
+            state.vat_status = vat_status
             
             for k, v in follow_ups.items():
                 state.add_history("agent", f"Asked for missing {k}")
@@ -332,7 +338,15 @@ def main():
 
             status_placeholder = st.empty()
             with st.spinner(f"{property_category} AI Specialist drafting valuation..."):
-                valuation_result = evaluate_valuation(state, status_placeholder, property_category=property_category, image=property_image, drive_times=drive_times)
+                valuation_result = evaluate_valuation(
+                    state, 
+                    status_placeholder, 
+                    property_category=property_category, 
+                    image=property_image, 
+                    drive_times=drive_times,
+                    title_deeds_status=title_deeds_status,
+                    vat_status=vat_status
+                )
             
             # Clear all status messages
             status_placeholder.empty()

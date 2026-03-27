@@ -31,7 +31,7 @@ class ValuationResult(typing.TypedDict):
     legal_disclaimer: str
     location_intelligence_summary: typing.Optional[str]
 
-def evaluate_valuation(session_memory, status_placeholder=None, retries=2, property_category="Residential", image=None, drive_times=None):
+def evaluate_valuation(session_memory, status_placeholder=None, retries=2, property_category="Residential", image=None, drive_times=None, title_deeds_status=None, vat_status=None):
     """
     Evaluator with Router Pattern: Uses Gemini to analyze session memory and optional image based on property category.
     """
@@ -48,8 +48,13 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     
     location_intel_instruction = (
         "Location Intelligence (Drive Times): You will be provided with real-time drive times to key destinations. "
-        "You MUST mathematically penalize the valuation score by at least 10 points if the drive to the nearest school or highway is over 20 minutes, "
-        "as this destroys expat rental appeal. You MUST explicitly mention these exact drive times in your Red Flags and Final Justification."
+        "If the drive times are missing or empty, DO NOT penalize the score. Only penalize the score if the drive times are successfully provided AND they are over 20 minutes. "
+        "If penalized, explicitly mention these exact drive times in your Red Flags and Final Justification."
+    )
+    
+    agent_override_instruction = (
+        "Agent Overrides: If the agent marks Title Deeds as 'Issued & Clean' or 'Pending (Trusted Developer)', YOU MUST NOT penalize the score for Title Deed risks, even if it is a new build. "
+        "If the agent specifies a VAT status (5% or 19%), you MUST use that exact percentage for your final investment cost calculations and remove any Red Flags about VAT uncertainty."
     )
 
     # Select System Instruction based on Category
@@ -62,7 +67,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
             "Aggressively hunt for 'Area market analysis' or 'Average price per m2' for land in the scraped text to fill market_avg_price_per_sqm. "
             "If missing, estimate it based on the city and zoning potential. "
             "If an image is provided, analyze the terrain, access roads, and neighboring structures to verify the description.\n"
-            + pr_law + "\n" + location_intel_instruction
+            + pr_law + "\n" + location_intel_instruction + "\n" + agent_override_instruction
         )
     else: # Default to Residential or Commercial
         system_instruction = (
@@ -78,7 +83,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
             "If missing, estimate it based on the city and property type (e.g. Limassol apartments avg ~4500/sqm). "
             "If an image is provided, analyze the visual condition of the property. Brutally penalize the score if the image shows mold, "
             "deterioration, or poor maintenance that the marketing text tries to hide or downplay.\n"
-            + pr_law + "\n" + location_intel_instruction
+            + pr_law + "\n" + location_intel_instruction + "\n" + agent_override_instruction
         )
 
     # Retrieve legal facts from RAG
@@ -96,6 +101,8 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     - Agent Condition Rating: {getattr(session_memory, 'condition_rating', 5)}/10
     - Agent Location Rating: {getattr(session_memory, 'location_rating', 5)}/10
     - Agent Insider Knowledge: {getattr(session_memory, 'insider_knowledge', 'None provided')}
+    - Title Deeds Status: {title_deeds_status if title_deeds_status else 'Unknown'}
+    - VAT Status: {vat_status if vat_status else 'Unknown'}
     - Real-Time Drive Times: {drive_times if drive_times else 'No location verified for drive times.'}
     
     Verified Cyprus Legal & Market Context:
