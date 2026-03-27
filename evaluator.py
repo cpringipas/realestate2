@@ -17,6 +17,11 @@ if api_key:
 model = genai.GenerativeModel('gemini-2.5-flash')
 
 # Define the expected JSON schema using TypedDict
+class NegotiationScripts(typing.TypedDict):
+    polite: str
+    professional: str
+    savage: str
+
 class ValuationResult(typing.TypedDict):
     score: int
     justification: str
@@ -30,8 +35,9 @@ class ValuationResult(typing.TypedDict):
     red_flags: typing.List[str]
     legal_disclaimer: str
     location_intelligence_summary: typing.Optional[str]
+    negotiation_scripts: NegotiationScripts
 
-def evaluate_valuation(session_memory, status_placeholder=None, retries=2, property_category="Residential", image=None, drive_times=None, title_deeds_status=None, vat_status=None, structural_dampness=None, roof_waterproofing=None, mep_status=None, energy_efficiency=None, unauthorized_extensions=None, capex_estimate=0, developer_track_record=None, construction_stage=None, mep_climate_specs=None, solar_pv_system=None, planning_deviations=None, legal_doc_text=None, inspection_image=None, nearby_cafes=0, nearby_restaurants=0, nearby_parks=0, target_language="English"):
+def evaluate_valuation(session_memory, status_placeholder=None, retries=2, property_category="Residential", image=None, drive_times=None, title_deeds_status=None, vat_status=None, building_density=0, plot_size=0, structural_dampness=None, roof_waterproofing=None, mep_status=None, energy_efficiency=None, unauthorized_extensions=None, capex_estimate=0, developer_track_record=None, construction_stage=None, mep_climate_specs=None, solar_pv_system=None, planning_deviations=None, legal_doc_text=None, inspection_images=None, nearby_cafes=0, nearby_restaurants=0, nearby_parks=0, nearby_schools=0, nearby_supermarkets=0, target_language="English"):
     """
     Evaluator with Router Pattern: Uses Gemini to analyze session memory and optional image based on property category.
     """
@@ -53,7 +59,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     )
     
     neighborhood_vibe_instruction = (
-        "Neighborhood Vibe & Walkability: You must analyze the amenity counts provided (cafes, restaurants, parks within 1km). "
+        "Neighborhood Vibe & Walkability: You must analyze the amenity counts provided (cafes, restaurants, schools, supermarkets within 1.5km). "
         "If there are many cafes and restaurants, explicitly boost the score and highlight the area as a vibrant, walkable neighborhood with high tenant demand for young professionals or short-term rentals. "
         "If the counts are near zero, classify it as a car-dependent, quiet residential area, which may lower short-term rental yields but appeal to families. "
         "Always mention the specific amenity counts in your final justification."
@@ -77,8 +83,8 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     )
 
     multimodal_instruction = (
-        "Multimodal Analysis: If an inspection photo is provided, you MUST perform a visual structural and technical analysis. "
-        "Override the user's condition rating if the photo shows severe damage (like spalling, dampness) or poor developer finishes. "
+        "Multimodal Analysis: If inspection photos are provided, you MUST perform a visual structural and technical analysis on ALL provided images for material quality and technical damage. "
+        "Override the user's condition rating if the photos show severe damage (like spalling, dampness) or poor developer finishes. "
         "If legal document text is provided, you MUST act as a Cyprus real estate lawyer. Scan the text for encumbrances, "
         "VAT clauses, or Title Deed issues, and override any user assumptions with the hard legal facts found in the document."
     )
@@ -87,6 +93,20 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
         f"CRITICAL RULE: You MUST output all string values in your final JSON response (including Justification, Red Flags, Strategy, and Disclaimer) "
         f"entirely in the requested {target_language}. The JSON keys must remain in English so the code parses correctly, "
         f"but the actual text the user reads must be translated fluently into {target_language} using professional real estate terminology."
+    )
+
+    negotiation_instruction = (
+        f"Using all the Red Flags, Technical Risks, and the Valuation Gap found, write three negotiation scripts in {target_language}. "
+        "The Polite script should be a soft opening. The Professional script should be data-backed and firm. "
+        "The Savage script should be a brutal, cold, and mathematically undeniable justification for a lowball offer, "
+        "citing every single flaw found (e.g., concrete spalling, high VAT, Tier 3 developer, or bad drive times). "
+        "Each script should be ready for WhatsApp or Email."
+    )
+
+    cyprus_market_benchmarks_instruction = (
+        "Cyprus Market Benchmarks: You must use the latest 2024-2025 Central Bank of Cyprus (CBC) trends: Apartment prices are rising faster than houses (especially in Larnaca/Limassol). Nicosia remains stable. "
+        "If a property price per sqm is significantly higher than the district average (e.g., >€3,500 in Nicosia or >€6,000 in Limassol), you MUST flag it as potentially overpriced unless the 'Technical Inspection' photos show ultra-luxury finishes. "
+        "Check if the 'Building Density' (if provided by the agent) allows for additional floors, and if so, add a 'Hidden Development Potential' bonus to the score."
     )
 
     # Select System Instruction based on Category
@@ -99,7 +119,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
             "Aggressively hunt for 'Area market analysis' or 'Average price per m2' for land in the scraped text to fill market_avg_price_per_sqm. "
             "If missing, estimate it based on the city and zoning potential. "
             "If an image is provided, analyze the terrain, access roads, and neighboring structures to verify the description.\n"
-            + pr_law + "\n" + location_intel_instruction + "\n" + neighborhood_vibe_instruction + "\n" + agent_override_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction + "\n" + translation_instruction
+            + pr_law + "\n" + location_intel_instruction + "\n" + neighborhood_vibe_instruction + "\n" + agent_override_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction + "\n" + translation_instruction + "\n" + negotiation_instruction + "\n" + cyprus_market_benchmarks_instruction
         )
     else: # Default to Residential or Commercial
         system_instruction = (
@@ -115,7 +135,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
             "If missing, estimate it based on the city and property type (e.g. Limassol apartments avg ~4500/sqm). "
             "If an image is provided, analyze the visual condition of the property. Brutally penalize the score if the image shows mold, "
             "deterioration, or poor maintenance that the marketing text tries to hide or downplay.\n"
-            + pr_law + "\n" + location_intel_instruction + "\n" + neighborhood_vibe_instruction + "\n" + agent_override_instruction + "\n" + technical_assessment_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction + "\n" + translation_instruction
+            + pr_law + "\n" + location_intel_instruction + "\n" + neighborhood_vibe_instruction + "\n" + agent_override_instruction + "\n" + technical_assessment_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction + "\n" + translation_instruction + "\n" + negotiation_instruction + "\n" + cyprus_market_benchmarks_instruction
         )
 
     # Retrieve legal facts from RAG
@@ -135,8 +155,10 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     - Agent Insider Knowledge: {getattr(session_memory, 'insider_knowledge', 'None provided')}
     - Title Deeds Status: {title_deeds_status if title_deeds_status else 'Unknown'}
     - VAT Status: {vat_status if vat_status else 'Unknown'}
+    - Building Density / Coefficient (%): {building_density}
+    - Plot Size (sqm): {plot_size}
     - Real-Time Drive Times: {drive_times if drive_times else 'No location verified for drive times.'}
-    - Nearby Amenities (Within 1km): {nearby_cafes} cafes, {nearby_restaurants} restaurants, {nearby_parks} parks
+    - Nearby Amenities (Within 1.5km): {nearby_cafes} cafes, {nearby_restaurants} restaurants, {nearby_schools} schools, {nearby_supermarkets} supermarkets, {nearby_parks} parks
     
     Technical & Structural Assessment Details:
     - Structural & Dampness: {structural_dampness}
@@ -176,6 +198,8 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     11. Determine PR eligibility status based on the Cyprus PR Immigration Law.
     12. Include a summary of drive times in 'location_intelligence_summary' and ensure they are used in the score and justification as instructed.
     13. Analyze amenity counts and reflect their impact on the score and justification as per the Neighborhood Vibe & Walkability instructions.
+    14. Write three negotiation scripts (polite, professional, savage) based on the negotiation instructions.
+    15. If Building Density and Plot Size are provided (>0), calculate the 'Maximum Build Capacity' (Plot Size * Building Density / 100) and compare it to the current house size to find Hidden Development Potential.
     
     IMPORTANT: You MUST base your legal warnings and VAT math strictly on the Verified Context provided.
     
@@ -184,8 +208,9 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     
     if image:
         prompt_content.append(image)
-    if inspection_image:
-        prompt_content.append(inspection_image)
+    if inspection_images:
+        for img in inspection_images:
+            prompt_content.append(img)
 
     # Step 1: Draft Generation
     draft_data = None

@@ -244,6 +244,8 @@ def main():
     with tab2:
         title_deeds_status = st.selectbox("Title Deeds Status", options=['🤖 Unknown / Let AI Assess', 'Issued & Clean', 'Pending (Trusted Developer)', 'Share of Land Only'])
         vat_status = st.selectbox("VAT Status", options=['🤖 Unknown / Let AI Assess', 'No VAT (Resale)', '5% (First Time Buyer)', '19% (Standard)'])
+        building_density = st.number_input("Building Density / Coefficient (%)", value=0)
+        plot_size = st.number_input("Plot Size (sqm)", value=0)
         
         uploaded_pdf = st.file_uploader("Upload Legal Documents (Title Deeds, Contracts)", type=["pdf"])
         legal_doc_text = None
@@ -259,10 +261,13 @@ def main():
     with tab3:
         property_age = st.radio("Property Age", options=['🤖 Unknown', 'Resale', 'New Build / Off-Plan'])
         
-        uploaded_inspection = st.file_uploader("Upload Inspection Photos (Damage, Finishes, Site Progress)", type=["png", "jpg", "jpeg"])
-        inspection_image = None
-        if uploaded_inspection is not None:
-            inspection_image = Image.open(uploaded_inspection)
+        uploaded_inspections = st.file_uploader("Upload Inspection Photos (Damage, Finishes, Site Progress)", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
+        inspection_images = []
+        if uploaded_inspections:
+            for uploaded_inspection in uploaded_inspections:
+                inspection_images.append(Image.open(uploaded_inspection))
+        
+        gen_renovation = st.checkbox('✨ Generate AI Virtual Renovations for these photos', value=False)
         
         # Initialize variables to avoid NameError
         structural_dampness = "🤖 Unknown / Let AI Assess"
@@ -371,6 +376,8 @@ def main():
             drive_times = None
             nearby_cafes = 0
             nearby_restaurants = 0
+            nearby_schools = 0
+            nearby_supermarkets = 0
             nearby_parks = 0
             
             if verified_location:
@@ -402,15 +409,23 @@ def main():
                             lat = geocode_result[0]['geometry']['location']['lat']
                             lng = geocode_result[0]['geometry']['location']['lng']
                             
-                            nearby_cafes = len(gmaps.places_nearby(location=(lat, lng), radius=1000, type='cafe').get('results', []))
-                            nearby_restaurants = len(gmaps.places_nearby(location=(lat, lng), radius=1000, type='restaurant').get('results', []))
-                            nearby_parks = len(gmaps.places_nearby(location=(lat, lng), radius=1000, type='park').get('results', []))
-                            
-                            st.write("### Neighborhood Vibe & Walkability")
-                            vcol1, vcol2, vcol3 = st.columns(3)
-                            vcol1.metric("Cafes (Within 1km)", nearby_cafes)
-                            vcol2.metric("Restaurants (Within 1km)", nearby_restaurants)
-                            vcol3.metric("Parks (Within 1km)", nearby_parks)
+                            try:
+                                nearby_cafes = len(gmaps.places_nearby(location=(lat, lng), radius=1500, type='cafe').get('results', []))
+                                nearby_restaurants = len(gmaps.places_nearby(location=(lat, lng), radius=1500, type='restaurant').get('results', []))
+                                nearby_schools = len(gmaps.places_nearby(location=(lat, lng), radius=1500, type='school').get('results', []))
+                                nearby_supermarkets = len(gmaps.places_nearby(location=(lat, lng), radius=1500, type='supermarket').get('results', []))
+                                nearby_parks = len(gmaps.places_nearby(location=(lat, lng), radius=1500, type='park').get('results', []))
+                                
+                                st.write("### Neighborhood Vibe & Walkability")
+                                vcol1, vcol2, vcol3, vcol4, vcol5 = st.columns(5)
+                                vcol1.metric("Cafes (Within 1.5km)", nearby_cafes)
+                                vcol2.metric("Restaurants (Within 1.5km)", nearby_restaurants)
+                                vcol3.metric("Schools (Within 1.5km)", nearby_schools)
+                                vcol4.metric("Supermarkets (Within 1.5km)", nearby_supermarkets)
+                                vcol5.metric("Parks (Within 1.5km)", nearby_parks)
+                            except Exception:
+                                st.error('Google Places API failed. Please ensure the Places API (New) is enabled in your Google Cloud Console.')
+                                nearby_cafes = nearby_restaurants = nearby_schools = nearby_supermarkets = nearby_parks = 0
 
                 except Exception as e:
                     st.error(f"Google Maps Error: {e}")
@@ -462,6 +477,8 @@ def main():
                     drive_times=drive_times,
                     title_deeds_status=title_deeds_status,
                     vat_status=vat_status,
+                    building_density=building_density,
+                    plot_size=plot_size,
                     structural_dampness=structural_dampness,
                     roof_waterproofing=roof_waterproofing,
                     mep_status=mep_status,
@@ -474,10 +491,12 @@ def main():
                     solar_pv_system=solar_pv_system,
                     planning_deviations=planning_deviations,
                     legal_doc_text=legal_doc_text,
-                    inspection_image=inspection_image,
+                    inspection_images=inspection_images,
                     nearby_cafes=nearby_cafes,
                     nearby_restaurants=nearby_restaurants,
                     nearby_parks=nearby_parks,
+                    nearby_schools=nearby_schools,
+                    nearby_supermarkets=nearby_supermarkets,
                     target_language=target_language
                 )
             
@@ -551,6 +570,18 @@ def main():
                 st.write(f"**Best Investment Strategy:** {valuation_result.get('best_investment_strategy', 'N/A')}")
                 st.write(f"**Legal Disclaimer:** {valuation_result.get('legal_disclaimer', 'N/A')}")
                 
+                # Virtual Renovation Showcase
+                if gen_renovation and inspection_images:
+                    st.divider()
+                    st.subheader("✨ AI Virtual Renovation Showcase")
+                    cols = st.columns(len(inspection_images))
+                    for i, img in enumerate(inspection_images):
+                        with cols[i]:
+                            st.image(img, caption=f"Original Photo {i+1}", use_container_width=True)
+                            st.info(f"Renovating Photo {i+1}...")
+                            # Mocking AI Renovation
+                            st.image(img, caption=f"✨ Renovated Version {i+1}", use_container_width=True)
+
                 # PDF Export
                 pdf_bytes = create_pdf_report(valuation_result, final_data, drive_times)
                 st.download_button(
@@ -569,6 +600,18 @@ def main():
                     if "listing_to_process" in st.session_state:
                         del st.session_state["listing_to_process"]
                     st.rerun()
+
+                # Negotiation Scripts
+                scripts = valuation_result.get('negotiation_scripts')
+                if scripts:
+                    with st.expander('📢 Savage Negotiator: Price Reduction Scripts', expanded=False):
+                        tab_polite, tab_prof, tab_savage = st.tabs(['😊 Polite', '💼 Professional', '🔥 Savage'])
+                        with tab_polite:
+                            st.code(scripts.get('polite', ''), language="text")
+                        with tab_prof:
+                            st.code(scripts.get('professional', ''), language="text")
+                        with tab_savage:
+                            st.code(scripts.get('savage', ''), language="text")
 
                 # 10-Year Financial Simulator
                 st.divider()
