@@ -10,6 +10,7 @@ import requests
 from PIL import Image
 import PyPDF2
 import pandas as pd
+from fpdf import FPDF
 
 # Load environment variables
 load_dotenv()
@@ -39,6 +40,48 @@ class SessionState:
 
     def add_history(self, role, message):
         self.history.append({"role": role, "message": message})
+
+def create_pdf_report(valuation_data, property_details, location_metrics):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(200, 10, txt="Investment Due Diligence Report", ln=True, align='C')
+    pdf.ln(10)
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(200, 10, txt=f"Final Valuation Score: {valuation_data.get('score', 0)}/100", ln=True)
+    pdf.ln(5)
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(200, 10, txt="Justification:", ln=True)
+    pdf.set_font("Arial", size=10)
+    pdf.multi_cell(0, 10, txt=str(valuation_data.get('justification', 'N/A')).encode('latin-1', 'replace').decode('latin-1'))
+    pdf.ln(5)
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(200, 10, txt="Financial Metrics:", ln=True)
+    pdf.set_font("Arial", size=10)
+    rent = valuation_data.get('estimated_monthly_rent', 0)
+    yield_val = valuation_data.get('gross_rental_yield_percentage', 0)
+    pdf.cell(200, 10, txt=f"Estimated Monthly Rent: EUR {rent}", ln=True)
+    pdf.cell(200, 10, txt=f"Gross Rental Yield: {yield_val}%", ln=True)
+    pdf.ln(5)
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(200, 10, txt=f"PR Eligibility Status: {valuation_data.get('pr_eligibility_status', 'N/A')}", ln=True)
+    pdf.ln(5)
+    
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(200, 10, txt="Red Flags:", ln=True)
+    pdf.set_font("Arial", size=10)
+    red_flags = valuation_data.get('red_flags', [])
+    if red_flags:
+        for flag in red_flags:
+            pdf.cell(200, 10, txt=f"- {str(flag).encode('latin-1', 'replace').decode('latin-1')}", ln=True)
+    else:
+        pdf.cell(200, 10, txt="None identified.", ln=True)
+    
+    return pdf.output(dest='S').encode('latin-1')
 
 # Mock database for neighborhood average prices
 NEIGHBORHOOD_MARKET_DATA = {
@@ -176,6 +219,9 @@ def route_property_type(text):
         return "Residential"
 
 def main():
+    st.sidebar.title("Settings")
+    target_language = st.sidebar.selectbox("Select Language / Γλώσσα / Язык", options=['English', 'Ελληνικά (Greek)', 'Русский (Russian)'])
+
     st.title("🏠 Cyprus Real Estate Valuation Agent")
     
     listing_url = st.text_input("Listing URL (optional, e.g., Bazaraki link):", placeholder="https://www.bazaraki.com/adv/...")
@@ -323,6 +369,9 @@ def main():
             # Location Intelligence
             verified_location = st.text_input("Verify Property Location (e.g., Agios Athanasios, Limassol)", placeholder="Agios Athanasios, Limassol")
             drive_times = None
+            nearby_cafes = 0
+            nearby_restaurants = 0
+            nearby_parks = 0
             
             if verified_location:
                 try:
@@ -346,6 +395,23 @@ def main():
                                     drive_times[dest] = "Unknown"
                                     with [col_dt1, col_dt2, col_dt3][i]:
                                         st.metric(f"Drive to {dest.title()}", "N/A")
+                        
+                        # Neighborhood Vibe Score
+                        geocode_result = gmaps.geocode(verified_location + ', Cyprus')
+                        if geocode_result:
+                            lat = geocode_result[0]['geometry']['location']['lat']
+                            lng = geocode_result[0]['geometry']['location']['lng']
+                            
+                            nearby_cafes = len(gmaps.places_nearby(location=(lat, lng), radius=1000, type='cafe').get('results', []))
+                            nearby_restaurants = len(gmaps.places_nearby(location=(lat, lng), radius=1000, type='restaurant').get('results', []))
+                            nearby_parks = len(gmaps.places_nearby(location=(lat, lng), radius=1000, type='park').get('results', []))
+                            
+                            st.write("### Neighborhood Vibe & Walkability")
+                            vcol1, vcol2, vcol3 = st.columns(3)
+                            vcol1.metric("Cafes (Within 1km)", nearby_cafes)
+                            vcol2.metric("Restaurants (Within 1km)", nearby_restaurants)
+                            vcol3.metric("Parks (Within 1km)", nearby_parks)
+
                 except Exception as e:
                     st.error(f"Google Maps Error: {e}")
 
@@ -408,7 +474,11 @@ def main():
                     solar_pv_system=solar_pv_system,
                     planning_deviations=planning_deviations,
                     legal_doc_text=legal_doc_text,
-                    inspection_image=inspection_image
+                    inspection_image=inspection_image,
+                    nearby_cafes=nearby_cafes,
+                    nearby_restaurants=nearby_restaurants,
+                    nearby_parks=nearby_parks,
+                    target_language=target_language
                 )
             
             # Clear all status messages
@@ -481,6 +551,15 @@ def main():
                 st.write(f"**Best Investment Strategy:** {valuation_result.get('best_investment_strategy', 'N/A')}")
                 st.write(f"**Legal Disclaimer:** {valuation_result.get('legal_disclaimer', 'N/A')}")
                 
+                # PDF Export
+                pdf_bytes = create_pdf_report(valuation_result, final_data, drive_times)
+                st.download_button(
+                    label="📥 Download Professional PDF Report",
+                    data=pdf_bytes,
+                    file_name="Cyprus_Property_Valuation_Report.pdf",
+                    mime="application/pdf"
+                )
+
                 st.divider()
                 # Option to reset
                 if st.button("Start New Evaluation"):

@@ -9,3 +9,4 @@ PyPDF2
 typing-extensions
 Pillow
 googlemaps
+fpdf

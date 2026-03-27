@@ -31,7 +31,7 @@ class ValuationResult(typing.TypedDict):
     legal_disclaimer: str
     location_intelligence_summary: typing.Optional[str]
 
-def evaluate_valuation(session_memory, status_placeholder=None, retries=2, property_category="Residential", image=None, drive_times=None, title_deeds_status=None, vat_status=None, structural_dampness=None, roof_waterproofing=None, mep_status=None, energy_efficiency=None, unauthorized_extensions=None, capex_estimate=0, developer_track_record=None, construction_stage=None, mep_climate_specs=None, solar_pv_system=None, planning_deviations=None, legal_doc_text=None, inspection_image=None):
+def evaluate_valuation(session_memory, status_placeholder=None, retries=2, property_category="Residential", image=None, drive_times=None, title_deeds_status=None, vat_status=None, structural_dampness=None, roof_waterproofing=None, mep_status=None, energy_efficiency=None, unauthorized_extensions=None, capex_estimate=0, developer_track_record=None, construction_stage=None, mep_climate_specs=None, solar_pv_system=None, planning_deviations=None, legal_doc_text=None, inspection_image=None, nearby_cafes=0, nearby_restaurants=0, nearby_parks=0, target_language="English"):
     """
     Evaluator with Router Pattern: Uses Gemini to analyze session memory and optional image based on property category.
     """
@@ -52,6 +52,13 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
         "If penalized, explicitly mention these exact drive times in your Red Flags and Final Justification."
     )
     
+    neighborhood_vibe_instruction = (
+        "Neighborhood Vibe & Walkability: You must analyze the amenity counts provided (cafes, restaurants, parks within 1km). "
+        "If there are many cafes and restaurants, explicitly boost the score and highlight the area as a vibrant, walkable neighborhood with high tenant demand for young professionals or short-term rentals. "
+        "If the counts are near zero, classify it as a car-dependent, quiet residential area, which may lower short-term rental yields but appeal to families. "
+        "Always mention the specific amenity counts in your final justification."
+    )
+
     agent_override_instruction = (
         "Agent Overrides: If the agent marks Title Deeds as 'Issued & Clean' or 'Pending (Trusted Developer)', YOU MUST NOT penalize the score for Title Deed risks, even if it is a new build. "
         "If the agent specifies a VAT status (5% or 19%), you MUST use that exact percentage for your final investment cost calculations and remove any Red Flags about VAT uncertainty."
@@ -76,6 +83,12 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
         "VAT clauses, or Title Deed issues, and override any user assumptions with the hard legal facts found in the document."
     )
 
+    translation_instruction = (
+        f"CRITICAL RULE: You MUST output all string values in your final JSON response (including Justification, Red Flags, Strategy, and Disclaimer) "
+        f"entirely in the requested {target_language}. The JSON keys must remain in English so the code parses correctly, "
+        f"but the actual text the user reads must be translated fluently into {target_language} using professional real estate terminology."
+    )
+
     # Select System Instruction based on Category
     if property_category == "Land":
         system_instruction = (
@@ -86,7 +99,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
             "Aggressively hunt for 'Area market analysis' or 'Average price per m2' for land in the scraped text to fill market_avg_price_per_sqm. "
             "If missing, estimate it based on the city and zoning potential. "
             "If an image is provided, analyze the terrain, access roads, and neighboring structures to verify the description.\n"
-            + pr_law + "\n" + location_intel_instruction + "\n" + agent_override_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction
+            + pr_law + "\n" + location_intel_instruction + "\n" + neighborhood_vibe_instruction + "\n" + agent_override_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction + "\n" + translation_instruction
         )
     else: # Default to Residential or Commercial
         system_instruction = (
@@ -102,7 +115,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
             "If missing, estimate it based on the city and property type (e.g. Limassol apartments avg ~4500/sqm). "
             "If an image is provided, analyze the visual condition of the property. Brutally penalize the score if the image shows mold, "
             "deterioration, or poor maintenance that the marketing text tries to hide or downplay.\n"
-            + pr_law + "\n" + location_intel_instruction + "\n" + agent_override_instruction + "\n" + technical_assessment_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction
+            + pr_law + "\n" + location_intel_instruction + "\n" + neighborhood_vibe_instruction + "\n" + agent_override_instruction + "\n" + technical_assessment_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction + "\n" + translation_instruction
         )
 
     # Retrieve legal facts from RAG
@@ -123,6 +136,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     - Title Deeds Status: {title_deeds_status if title_deeds_status else 'Unknown'}
     - VAT Status: {vat_status if vat_status else 'Unknown'}
     - Real-Time Drive Times: {drive_times if drive_times else 'No location verified for drive times.'}
+    - Nearby Amenities (Within 1km): {nearby_cafes} cafes, {nearby_restaurants} restaurants, {nearby_parks} parks
     
     Technical & Structural Assessment Details:
     - Structural & Dampness: {structural_dampness}
@@ -161,6 +175,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     10. Generate a legal_disclaimer aggressively warning about Cyprus-specific risks.
     11. Determine PR eligibility status based on the Cyprus PR Immigration Law.
     12. Include a summary of drive times in 'location_intelligence_summary' and ensure they are used in the score and justification as instructed.
+    13. Analyze amenity counts and reflect their impact on the score and justification as per the Neighborhood Vibe & Walkability instructions.
     
     IMPORTANT: You MUST base your legal warnings and VAT math strictly on the Verified Context provided.
     
