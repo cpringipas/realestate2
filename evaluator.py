@@ -110,6 +110,12 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     )
 
     # Select System Instruction based on Category
+    strict_rule = (
+        "STRICT RULE: Do not assume VAT, Title Deed status, or Renovation costs if not provided. Instead, if a critical value is missing, "
+        "you MUST create a section at the very top called ⚠️ CLARIFICATION NEEDED and list exactly what the agent needs to verify before "
+        "a final score can be trusted. Use placeholders like [NEED DATA] in your math if unknown."
+    )
+
     if property_category == "Land":
         system_instruction = (
             "You are a Cyprus Land Development Expert. Evaluate this plot of land. "
@@ -119,7 +125,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
             "Aggressively hunt for 'Area market analysis' or 'Average price per m2' for land in the scraped text to fill market_avg_price_per_sqm. "
             "If missing, estimate it based on the city and zoning potential. "
             "If an image is provided, analyze the terrain, access roads, and neighboring structures to verify the description.\n"
-            + pr_law + "\n" + location_intel_instruction + "\n" + neighborhood_vibe_instruction + "\n" + agent_override_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction + "\n" + translation_instruction + "\n" + negotiation_instruction + "\n" + cyprus_market_benchmarks_instruction
+            + strict_rule + "\n" + pr_law + "\n" + location_intel_instruction + "\n" + neighborhood_vibe_instruction + "\n" + agent_override_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction + "\n" + translation_instruction + "\n" + negotiation_instruction + "\n" + cyprus_market_benchmarks_instruction
         )
     else: # Default to Residential or Commercial
         system_instruction = (
@@ -135,7 +141,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
             "If missing, estimate it based on the city and property type (e.g. Limassol apartments avg ~4500/sqm). "
             "If an image is provided, analyze the visual condition of the property. Brutally penalize the score if the image shows mold, "
             "deterioration, or poor maintenance that the marketing text tries to hide or downplay.\n"
-            + pr_law + "\n" + location_intel_instruction + "\n" + neighborhood_vibe_instruction + "\n" + agent_override_instruction + "\n" + technical_assessment_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction + "\n" + translation_instruction + "\n" + negotiation_instruction + "\n" + cyprus_market_benchmarks_instruction
+            + strict_rule + "\n" + pr_law + "\n" + location_intel_instruction + "\n" + neighborhood_vibe_instruction + "\n" + agent_override_instruction + "\n" + technical_assessment_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction + "\n" + translation_instruction + "\n" + negotiation_instruction + "\n" + cyprus_market_benchmarks_instruction
         )
 
     # Retrieve legal facts from RAG
