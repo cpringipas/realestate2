@@ -5,7 +5,7 @@ import google.generativeai as genai
 import googlemaps
 from dotenv import load_dotenv
 import typing_extensions as typing
-from evaluator import evaluate_valuation
+from evaluator import evaluate_valuation, run_detective_mode
 import requests
 from PIL import Image
 import PyPDF2
@@ -148,6 +148,29 @@ def text_search_v2(query, lat, lng, gmaps_key):
         st.error(f"Places API (New) Error: {e}")
         return []
 
+def get_live_amenities(estimated_location, gmaps_key):
+    """Uses Google Places to find real schools and cafes near the AI's guessed location."""
+    if not gmaps_key:
+        return None, None
+        
+    if "cannot be reliably determined" in estimated_location.lower():
+        return None, None
+    
+    try:
+        gmaps = googlemaps.Client(key=gmaps_key)
+        # 1. Get Schools
+        schools_search = gmaps.places(query=f"schools in {estimated_location}", type="school")
+        schools = schools_search.get('results', [])[:5] # Top 5
+        
+        # 2. Get Cafes
+        cafes_search = gmaps.places(query=f"cafes in {estimated_location}", type="cafe")
+        cafes = cafes_search.get('results', [])[:5] # Top 5
+        
+        return schools, cafes
+    except Exception as e:
+        st.error(f"Google Maps Search failed: {e}")
+        return None, None
+
 def planner(description):
     """
     Planner function that uses Gemini API to intelligently extract property details.
@@ -260,7 +283,66 @@ def main():
         property_image = Image.open(uploaded_file)
         st.image(property_image, caption="Uploaded Property Image", use_container_width=True)
 
-    tab1, tab2, tab3 = st.tabs(['📋 Basic Overrides', '⚖️ Legal & Due Diligence', '🛠️ Technical Inspection'])
+    tab1, tab2, tab3, tab_detective = st.tabs(['📋 Basic Overrides', '⚖️ Legal & Due Diligence', '🛠️ Technical Inspection', '🕵️ Detective Mode'])
+
+    with tab_detective:
+        st.subheader("Visual Location Inference")
+        # 1. Allow Multiple Pictures
+        uploaded_images = st.file_uploader(
+            "Upload Listing Photos for Analysis", 
+            type=['jpg', 'png', 'jpeg'], 
+            accept_multiple_files=True
+        )
+        
+        # 2. Add the "No Assumptions" button
+        if st.button("🔍 Run Detective Analysis"):
+            if uploaded_images:
+                # Convert uploaded files to PIL format for Gemini
+                pil_images = [Image.open(img) for img in uploaded_images]
+                
+                with st.spinner("Analyzing visual clues and searching Google Maps..."):
+                    gemini_model = genai.GenerativeModel('gemini-2.5-flash')
+                    
+                    # Combine title, description, and location hints for the AI
+                    # We will use the main listing text area if available, and default empty for hints/title
+                    full_text = f"Title: {listing[:50]}...\nDesc: {listing}\nHints: {listing_url}"
+                    
+                    # Call our detective function
+                    raw_ai_analysis = run_detective_mode(gemini_model, full_text, pil_images)
+                    
+                    # Phase 2: Live Data Extraction
+                    try:
+                        # We extract the "City, Area" line from the AI output (usually the first line after title/label)
+                        # We'll split lines and look for the first line that is likely the location.
+                        lines = raw_ai_analysis.strip().split('\n')
+                        estimated_loc_line = ""
+                        for line in lines:
+                            if "Confidence:" not in line and "Reasoning:" not in line and "NEARBY" not in line and line.strip() != "":
+                                estimated_loc_line = line.replace("1. ESTIMATED LOCATION:", "").strip()
+                                break
+                        if not estimated_loc_line:
+                            estimated_loc_line = raw_ai_analysis.split('\n')[1]
+                    except Exception:
+                        estimated_loc_line = raw_ai_analysis
+                    
+                    gmaps_api_key = os.environ.get("GOOGLE_MAPS_API_KEY")
+                    live_schools, live_cafes = get_live_amenities(estimated_loc_line, gmaps_api_key)
+                    
+                    # Phase 3: Display results
+                    st.markdown("---")
+                    st.markdown(raw_ai_analysis)
+                    
+                    if live_schools:
+                        st.subheader("📍 Verified Nearby Schools (Live)")
+                        for s in live_schools:
+                            st.write(f"✅ {s['name']} — {s.get('formatted_address', '')}")
+                            
+                    if live_cafes:
+                        st.subheader("☕ Verified Nearby Cafés (Live)")
+                        for c in live_cafes:
+                            st.write(f"✅ {c['name']} — ⭐ {c.get('rating', 'N/A')}")
+            else:
+                st.warning("Please upload at least one image for the AI to analyze.")
 
     with tab1:
         condition_rating = st.slider("Condition & Finish Quality (1-10)", min_value=1, max_value=10, value=5)

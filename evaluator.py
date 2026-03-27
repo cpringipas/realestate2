@@ -302,3 +302,31 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
                 draft_data["red_flags"].append(f"Senior Partner review failed: {str(e)}")
                 return draft_data
             continue
+
+DETECTIVE_PROMPT = """
+You are a Real Estate Detective in Cyprus. Analyze the provided images and text.
+Your goal is to infer the location and find nearby amenities.
+
+STRICT OUTPUT RULES:
+1. ESTIMATED LOCATION: 
+- Provide City, Area, and Street (if identifiable).
+- Confidence: [Low/Medium/High].
+- Reasoning: Mention specific visual clues (e.g., "The blue street signs and modern glass high-rises suggest Limassol Marina area").
+
+2. NEARBY SCHOOLS:
+- List top 5 closest (Name – Approx Distance).
+
+3. NEARBY CAFÉS:
+- List top 5 closest (Name – Approx Distance).
+
+RULES:
+- If you can't find the street, say: "Street cannot be reliably determined".
+- Do NOT make up information. Use placeholders like [Unknown] if clues are missing.
+- Respond ONLY with these three sections.
+"""
+
+def run_detective_mode(model, text_input, images):
+    # We pass the instruction, the listing text, and the array of images
+    prompt_parts = [DETECTIVE_PROMPT, text_input] + images
+    response = model.generate_content(prompt_parts)
+    return response.text
