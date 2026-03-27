@@ -33,6 +33,7 @@ class SessionState:
         self.market_data = None
         self.history = []
         self.condition_rating = 5
+        self.finish_rating = 5
         self.location_rating = 5
         self.insider_knowledge = ""
         self.title_deeds_status = "Unknown (AI assumes risk)"
@@ -345,7 +346,18 @@ def main():
                 st.warning("Please upload at least one image for the AI to analyze.")
 
     with tab1:
-        condition_rating = st.slider("Condition & Finish Quality (1-10)", min_value=1, max_value=10, value=5)
+        col_c1, col_c2 = st.columns([2, 1])
+        with col_c1:
+            condition_rating = st.slider("Condition Rating (1-10)", min_value=1, max_value=10, value=5)
+        with col_c2:
+            st.info("📋 Quick Guide: 10=New, 6=Minor Wear, 2=Structural Issues/Damp")
+
+        col_f1, col_f2 = st.columns([2, 1])
+        with col_f1:
+            finish_rating = st.slider("Finish Quality (1-10)", min_value=1, max_value=10, value=5)
+        with col_f2:
+            st.info("📋 Quick Guide: 10=Marble/VRV/Smart, 6=Standard Tiles/Split AC, 2=Obsolete")
+
         location_rating = st.slider("Street Vibe & Location Reality (1-10)", min_value=1, max_value=10, value=5)
         street_vibe_strategy = st.selectbox("Street Vibe Strategy", options=['Auto-Detect', 'Student Hub', 'Luxury/Expat', 'Family Residential', 'Business/Commercial'])
         insider_knowledge = st.text_area("Agent Insider Knowledge (e.g., Seller motivation, hidden repair costs, realistic closing price)")
@@ -558,6 +570,7 @@ def main():
             state = SessionState()
             state.initial_description = listing_to_process
             state.condition_rating = condition_rating
+            state.finish_rating = finish_rating
             state.location_rating = location_rating
             state.insider_knowledge = insider_knowledge
             state.title_deeds_status = title_deeds_status

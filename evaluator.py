@@ -85,6 +85,8 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     multimodal_instruction = (
         "Multimodal Analysis: If inspection photos are provided, you MUST perform a visual structural and technical analysis on ALL provided images for material quality and technical damage. "
         "Override the user's condition rating if the photos show severe damage (like spalling, dampness) or poor developer finishes. "
+        "When the agent provides a Condition or Finish rating, cross-reference it with the uploaded photos. "
+        "If the agent says Finish is 10 but photos show wall-mounted AC units and ceramic tiles, call out this discrepancy in the Red Flags as 'Inconsistent Data/Overstated Luxury'. "
         "If legal document text is provided, you MUST act as a Cyprus real estate lawyer. Scan the text for encumbrances, "
         "VAT clauses, or Title Deed issues, and override any user assumptions with the hard legal facts found in the document."
     )
@@ -157,6 +159,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     - Follow-up Clarifications: {session_memory.follow_ups}
     - Market Data (Neighborhood Avg): {session_memory.market_data}
     - Agent Condition Rating: {getattr(session_memory, 'condition_rating', 5)}/10
+    - Agent Finish Rating: {getattr(session_memory, 'finish_rating', 5)}/10
     - Agent Location Rating: {getattr(session_memory, 'location_rating', 5)}/10
     - Agent Insider Knowledge: {getattr(session_memory, 'insider_knowledge', 'None provided')}
     - Title Deeds Status: {title_deeds_status if title_deeds_status else 'Unknown'}
@@ -272,6 +275,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     - Follow-up Clarifications: {session_memory.follow_ups}
     - Market Data (Neighborhood Avg): {session_memory.market_data}
     - Agent Condition Rating: {getattr(session_memory, 'condition_rating', 5)}/10
+    - Agent Finish Rating: {getattr(session_memory, 'finish_rating', 5)}/10
     - Agent Location Rating: {getattr(session_memory, 'location_rating', 5)}/10
     - Agent Insider Knowledge: {getattr(session_memory, 'insider_knowledge', 'None provided')}
     
