@@ -200,6 +200,9 @@ def main():
 
         listing_to_process = st.session_state.listing_to_process
 
+        with st.expander('View Raw Scraped Text', expanded=False):
+            st.text(listing_to_process)
+
         if not listing_to_process:
             st.error("Please provide a listing URL or paste the listing text.")
             st.session_state.evaluate_clicked = False
