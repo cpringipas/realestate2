@@ -2,10 +2,13 @@ import streamlit as st
 import json
 import os
 import google.generativeai as genai
+import googlemaps
 from dotenv import load_dotenv
 import typing_extensions as typing
 from evaluator import evaluate_valuation
 import requests
+from PIL import Image
+import pandas as pd
 
 # Load environment variables
 load_dotenv()
@@ -175,6 +178,12 @@ def main():
     listing_url = st.text_input("Listing URL (optional, e.g., Bazaraki link):", placeholder="https://www.bazaraki.com/adv/...")
     listing = st.text_area("Or paste your property listing here:", height=200, placeholder="e.g., 2 bedroom apartment in Limassol, 100 sqm, 2 bathrooms...")
     
+    uploaded_file = st.file_uploader("Upload Property Image (optional):", type=["png", "jpg", "jpeg"])
+    property_image = None
+    if uploaded_file is not None:
+        property_image = Image.open(uploaded_file)
+        st.image(property_image, caption="Uploaded Property Image", use_container_width=True)
+
     with st.expander("Agent On-the-Ground Assessment (Optional)"):
         condition_rating = st.slider("Condition & Finish Quality (1-10)", min_value=1, max_value=10, value=5)
         location_rating = st.slider("Street Vibe & Location Reality (1-10)", min_value=1, max_value=10, value=5)
@@ -256,6 +265,36 @@ def main():
 
             # Display extracted/provided details beautifully
             st.subheader("Property Details")
+            
+            # Location Intelligence
+            verified_location = st.text_input("Verify Property Location (e.g., Agios Athanasios, Limassol)", placeholder="Agios Athanasios, Limassol")
+            drive_times = None
+            
+            if verified_location:
+                try:
+                    gmaps_key = os.environ.get("GOOGLE_MAPS_API_KEY")
+                    if gmaps_key:
+                        gmaps = googlemaps.Client(key=gmaps_key)
+                        destinations = ['nearest beach', 'highway ramp', 'International English School']
+                        dm_result = gmaps.distance_matrix(verified_location, destinations, mode="driving")
+                        
+                        if dm_result['status'] == 'OK':
+                            drive_times = {}
+                            col_dt1, col_dt2, col_dt3 = st.columns(3)
+                            elements = dm_result['rows'][0]['elements']
+                            for i, dest in enumerate(destinations):
+                                if elements[i]['status'] == 'OK':
+                                    duration_text = elements[i]['duration']['text']
+                                    drive_times[dest] = duration_text
+                                    with [col_dt1, col_dt2, col_dt3][i]:
+                                        st.metric(f"Drive to {dest.title()}", duration_text)
+                                else:
+                                    drive_times[dest] = "Unknown"
+                                    with [col_dt1, col_dt2, col_dt3][i]:
+                                        st.metric(f"Drive to {dest.title()}", "N/A")
+                except Exception as e:
+                    st.error(f"Google Maps Error: {e}")
+
             col1, col2, col3, col4 = st.columns(4)
             with col1:
                 st.metric("Type", str(final_data.get("property_type", "N/A")))
@@ -293,7 +332,7 @@ def main():
 
             status_placeholder = st.empty()
             with st.spinner(f"{property_category} AI Specialist drafting valuation..."):
-                valuation_result = evaluate_valuation(state, status_placeholder, property_category=property_category)
+                valuation_result = evaluate_valuation(state, status_placeholder, property_category=property_category, image=property_image, drive_times=drive_times)
             
             # Clear all status messages
             status_placeholder.empty()
@@ -301,12 +340,43 @@ def main():
             if "error" in valuation_result:
                 st.error(valuation_result["error"])
             else:
+                # PR Eligibility Display
+                pr_status = valuation_result.get("pr_eligibility_status", "")
+                if pr_status:
+                    if "Eligible for Fast-Track PR" in pr_status:
+                        st.success(f"**PR Status:** {pr_status}")
+                    elif "Not Eligible" in pr_status:
+                        st.error(f"**PR Status:** {pr_status}")
+                    else:
+                        st.warning(f"**PR Status:** {pr_status}")
+                        
                 st.divider()
                 st.subheader("Final Valuation Result")
                 
                 # Final Score using st.metric
                 st.metric("Final Valuation Score", f"{valuation_result.get('score', 0)}/100")
                 
+                # Market Comparison Metrics
+                listing_psqm = valuation_result.get('listing_price_per_sqm')
+                market_avg_psqm = valuation_result.get('market_avg_price_per_sqm')
+                
+                m1, m2 = st.columns(2)
+                with m1:
+                    delta_val = None
+                    if listing_psqm and market_avg_psqm:
+                        delta_val = market_avg_psqm - listing_psqm
+                    st.metric(
+                        "Listing Price/sqm", 
+                        f"€{listing_psqm:,}" if listing_psqm else "N/A",
+                        delta=delta_val,
+                        delta_color="inverse"
+                    )
+                with m2:
+                    st.metric(
+                        "Market Avg Price/sqm", 
+                        f"€{market_avg_psqm:,}" if market_avg_psqm else "N/A"
+                    )
+
                 # Justification, Rent, Yield, and Red Flags using st.write as requested
                 st.write(f"**Justification:** {valuation_result.get('justification', 'N/A')}")
                 
@@ -343,6 +413,77 @@ def main():
                     if "listing_to_process" in st.session_state:
                         del st.session_state["listing_to_process"]
                     st.rerun()
+
+                # 10-Year Financial Simulator
+                st.divider()
+                with st.expander("🏦 10-Year Financial & Mortgage Simulator", expanded=True):
+                    price_val = final_data.get("price")
+                    if price_val and str(price_val).isdigit():
+                        price = int(price_val)
+                        
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            down_payment_pct = st.slider("Down Payment %", 10, 100, 30)
+                        with col2:
+                            interest_rate = st.slider("Interest Rate %", 1.0, 10.0, 4.5)
+                        with col3:
+                            loan_term = st.slider("Loan Term (Years)", 5, 35, 20)
+                            
+                        # Mortgage Calculation
+                        loan_amount = price * (1 - down_payment_pct / 100)
+                        monthly_rate = (interest_rate / 100) / 12
+                        num_payments = loan_term * 12
+                        
+                        if monthly_rate > 0:
+                            monthly_payment = loan_amount * (monthly_rate * (1 + monthly_rate)**num_payments) / ((1 + monthly_rate)**num_payments - 1)
+                        else:
+                            monthly_payment = loan_amount / num_payments if num_payments > 0 else 0
+                        
+                        annual_mortgage = monthly_payment * 12
+                        
+                        # Year 1 Stats
+                        est_monthly_rent = valuation_result.get("estimated_monthly_rent", 0) or 0
+                        est_annual_rent = est_monthly_rent * 12
+                        est_yearly_expenses = valuation_result.get("estimated_yearly_expenses", 0) or 0
+                        
+                        noi_y1 = est_annual_rent - est_yearly_expenses
+                        cap_rate = (noi_y1 / price) * 100 if price > 0 else 0
+                        
+                        initial_investment = price * (down_payment_pct / 100)
+                        cash_flow_y1 = noi_y1 - annual_mortgage
+                        coc_return = (cash_flow_y1 / initial_investment) * 100 if initial_investment > 0 else 0
+                        
+                        m1, m2, m3 = st.columns(3)
+                        m1.metric("Annual Mortgage", f"€{int(annual_mortgage):,}")
+                        m2.metric("Cap Rate (Year 1)", f"{cap_rate:.2f}%")
+                        m3.metric("Cash-on-Cash (Year 1)", f"{coc_return:.2f}%")
+                        
+                        # 10-Year Projection
+                        projection_data = []
+                        curr_rent = est_annual_rent
+                        curr_expenses = est_yearly_expenses
+                        
+                        for year in range(1, 11):
+                            noi = curr_rent - curr_expenses
+                            net_cash_flow = noi - annual_mortgage
+                            
+                            projection_data.append({
+                                "Year": year,
+                                "Annual Rent": int(curr_rent),
+                                "Operating Expenses": int(curr_expenses),
+                                "NOI": int(noi),
+                                "Annual Mortgage": int(annual_mortgage),
+                                "Net Cash Flow": int(net_cash_flow)
+                            })
+                            
+                            # Growth
+                            curr_rent *= 1.03
+                            curr_expenses *= 1.02
+                            
+                        df = pd.DataFrame(projection_data)
+                        st.dataframe(df.set_index("Year"), use_container_width=True)
+                    else:
+                        st.info("Please ensure a valid price is provided to run the financial simulator.")
 
 if __name__ == "__main__":
     main()

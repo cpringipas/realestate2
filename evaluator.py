@@ -21,27 +21,49 @@ class ValuationResult(typing.TypedDict):
     score: int
     justification: str
     estimated_monthly_rent: typing.Optional[int]
+    estimated_yearly_expenses: typing.Optional[int]
     gross_rental_yield_percentage: typing.Optional[float]
+    listing_price_per_sqm: typing.Optional[int]
+    market_avg_price_per_sqm: typing.Optional[int]
+    pr_eligibility_status: str
     best_investment_strategy: str
     red_flags: typing.List[str]
     legal_disclaimer: str
+    location_intelligence_summary: typing.Optional[str]
 
-def evaluate_valuation(session_memory, status_placeholder=None, retries=2, property_category="Residential"):
+def evaluate_valuation(session_memory, status_placeholder=None, retries=2, property_category="Residential", image=None, drive_times=None):
     """
-    Evaluator with Router Pattern: Uses Gemini to analyze session memory based on property category.
+    Evaluator with Router Pattern: Uses Gemini to analyze session memory and optional image based on property category.
     """
     if not api_key:
         return {"error": "GOOGLE_API_KEY not found. Please set it to use the Evaluator."}
     
+    pr_law = (
+        "Cyprus PR Immigration Law: You must determine if this property qualifies for the Cyprus Fast-Track Permanent Residency. "
+        "The strict rules are: The purchase price must be €300,000 or higher, AND the property MUST be a brand new build (or off-plan/under construction). "
+        "Resales strictly DO NOT qualify. If it clearly meets both rules, output 'Eligible for Fast-Track PR 🇨🇾'. "
+        "If it is a resale or under €300k, output 'Not Eligible for PR'. "
+        "If the price is >= €300k but it is unclear if it is new, output 'Price qualifies, but must verify New Build status'."
+    )
+    
+    location_intel_instruction = (
+        "Location Intelligence (Drive Times): You will be provided with real-time drive times to key destinations. "
+        "You MUST mathematically penalize the valuation score by at least 10 points if the drive to the nearest school or highway is over 20 minutes, "
+        "as this destroys expat rental appeal. You MUST explicitly mention these exact drive times in your Red Flags and Final Justification."
+    )
+
     # Select System Instruction based on Category
     if property_category == "Land":
         system_instruction = (
             "You are a Cyprus Land Development Expert. Evaluate this plot of land. "
             "You MUST focus heavily on Building Density (Συντελεστής Δόμησης), Coverage Ratio, zoning laws, and VAT on land sales. "
             "Ignore rental yield and monthly rent. Grade the plot based on development potential from 1 to 100. "
-            "Analyze the feasibility of construction and potential profit upon development completion."
+            "Analyze the feasibility of construction and potential profit upon development completion. "
+            "Aggressively hunt for 'Area market analysis' or 'Average price per m2' for land in the scraped text to fill market_avg_price_per_sqm. "
+            "If missing, estimate it based on the city and zoning potential. "
+            "If an image is provided, analyze the terrain, access roads, and neighboring structures to verify the description.\n"
+            + pr_law + "\n" + location_intel_instruction
         )
-        response_schema = ValuationResult
     else: # Default to Residential or Commercial
         system_instruction = (
             "You are a ruthless real estate investor based in Cyprus. You evaluate properties in Euros (€) and size in square meters (sqm). "
@@ -49,16 +71,22 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
             "You must penalize listings heavily if they do not clarify the status of the Title Deeds or VAT. "
             "You must treat the Agent Insider Knowledge as the absolute truth. "
             "Grade the deal from 1 to 100 based purely on financial value in the Cyprus market. "
-            "Realistically estimate the monthly rent and calculate the gross rental yield percentage."
+            "Realistically estimate the monthly rent and calculate the gross rental yield percentage. "
+            "Estimate realistic Cyprus yearly expenses (communal fees typically €50-150/month for apartments, refuse tax ~€150-200/year, "
+            "and maintenance calculated as 0.5% to 2% of the price based on the condition rating). "
+            "Aggressively hunt for 'Area market analysis' or 'Average price per m2' in the scraped text to fill market_avg_price_per_sqm. "
+            "If missing, estimate it based on the city and property type (e.g. Limassol apartments avg ~4500/sqm). "
+            "If an image is provided, analyze the visual condition of the property. Brutally penalize the score if the image shows mold, "
+            "deterioration, or poor maintenance that the marketing text tries to hide or downplay.\n"
+            + pr_law + "\n" + location_intel_instruction
         )
-        response_schema = ValuationResult
 
     # Retrieve legal facts from RAG
     legal_facts = retrieve_context(session_memory.initial_description)
     
     history_str = "\n".join([f"{h['role']}: {h['message']}" for h in session_memory.history])
     
-    prompt = f"""
+    prompt_content = [f"""
     SYSTEM: {system_instruction}
     
     Analyze the following property data and session history:
@@ -68,6 +96,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     - Agent Condition Rating: {getattr(session_memory, 'condition_rating', 5)}/10
     - Agent Location Rating: {getattr(session_memory, 'location_rating', 5)}/10
     - Agent Insider Knowledge: {getattr(session_memory, 'insider_knowledge', 'None provided')}
+    - Real-Time Drive Times: {drive_times if drive_times else 'No location verified for drive times.'}
     
     Verified Cyprus Legal & Market Context:
     {legal_facts}
@@ -80,14 +109,22 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     2. Factor in the user's clarifications and agent's ratings.
     3. Calculate a valuation score from 1 to 100.
     4. For Land: Focus on Building Density and Coverage. For Residential: Estimate rent and yield.
-    5. Recommend the best investment strategy.
-    6. List any legal/financial red flags (VAT, Title Deeds, Zoning, etc.).
-    7. Generate a legal_disclaimer aggressively warning about Cyprus-specific risks.
+    5. Estimate yearly operating expenses (communal, taxes, maintenance).
+    6. Calculate listing_price_per_sqm (Total Price / Total Size).
+    7. Extract or estimate market_avg_price_per_sqm for this specific area/type.
+    8. Recommend the best investment strategy.
+    9. List any legal/financial red flags (VAT, Title Deeds, Zoning, etc.).
+    10. Generate a legal_disclaimer aggressively warning about Cyprus-specific risks.
+    11. Determine PR eligibility status based on the Cyprus PR Immigration Law.
+    12. Include a summary of drive times in 'location_intelligence_summary' and ensure they are used in the score and justification as instructed.
     
     IMPORTANT: You MUST base your legal warnings and VAT math strictly on the Verified Context provided.
     
     The output must strictly be a JSON object matching the requested schema. The justification should explain the brutal truth in under 50 words.
-    """
+    """]
+    
+    if image:
+        prompt_content.append(image)
 
     # Step 1: Draft Generation
     draft_data = None
@@ -95,7 +132,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
         try:
             # Enforce JSON output and schema strictly at the API generation level
             response = model.generate_content(
-                prompt,
+                prompt_content,
                 generation_config=genai.GenerationConfig(
                     response_mime_type="application/json",
                     response_schema=ValuationResult,

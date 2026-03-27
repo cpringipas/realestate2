@@ -7,3 +7,5 @@ cloudscraper
 chromadb
 PyPDF2
 typing-extensions
+Pillow
+googlemaps
