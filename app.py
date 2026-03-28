@@ -15,6 +15,9 @@ from fpdf import FPDF
 # Load environment variables
 load_dotenv()
 
+if "logged_in" not in st.session_state:
+    st.session_state.logged_in = False
+
 # Configure the Gemini API
 api_key = os.environ.get("GOOGLE_API_KEY")
 if api_key:
@@ -269,22 +272,231 @@ def route_property_type(text):
     except Exception:
         return "Residential"
 
+def mock_crawler(target_area, beds, baths, max_budget):
+    """
+    Mock Crawler: Simulates searching 3 websites and returns 5 dummy listings.
+    """
+    listings = [
+        {
+            "title": f"Modern {beds}BR Apartment in {target_area}",
+            "description": f"Beautiful {beds} bedroom apartment in {target_area} with {baths} bathrooms. High quality finishes, near amenities. Price: €{max_budget - 20000 if max_budget > 20000 else 150000}",
+            "price": max_budget - 20000 if max_budget > 20000 else 150000,
+            "size_in_sqm": 120,
+            "city": target_area,
+            "bedrooms": beds,
+            "bathrooms": baths,
+            "url": "https://example.com/listing1"
+        },
+        {
+            "title": f"Spacious House in {target_area}",
+            "description": f"Large house with {beds} bedrooms and {baths} bathrooms. Garden and parking included. Located in a quiet area of {target_area}. Price: €{max_budget - 50000 if max_budget > 50000 else 250000}",
+            "price": max_budget - 50000 if max_budget > 50000 else 250000,
+            "size_in_sqm": 200,
+            "city": target_area,
+            "bedrooms": beds,
+            "bathrooms": baths,
+            "url": "https://example.com/listing2"
+        },
+        {
+            "title": f"Luxury Penthouse {target_area}",
+            "description": f"Top floor penthouse with amazing views. {beds} beds, {baths} baths. Roof garden. Price: €{max_budget - 10000 if max_budget > 10000 else 350000}",
+            "price": max_budget - 10000 if max_budget > 10000 else 350000,
+            "size_in_sqm": 150,
+            "city": target_area,
+            "bedrooms": beds,
+            "bathrooms": baths,
+            "url": "https://example.com/listing3"
+        },
+        {
+            "title": f"Cozy Apartment in {target_area}",
+            "description": f"Well-maintained apartment in the heart of {target_area}. {beds} bedrooms, {baths} bathrooms. Close to shops. Price: €{max_budget - 80000 if max_budget > 80000 else 120000}",
+            "price": max_budget - 80000 if max_budget > 80000 else 120000,
+            "size_in_sqm": 90,
+            "city": target_area,
+            "bedrooms": beds,
+            "bathrooms": baths,
+            "url": "https://example.com/listing4"
+        },
+        {
+            "title": f"Brand New Project {target_area}",
+            "description": f"Under construction apartment. {beds} bedrooms, {baths} bathrooms. Energy efficiency A. Price: €{max_budget - 30000 if max_budget > 30000 else 180000}",
+            "price": max_budget - 30000 if max_budget > 30000 else 180000,
+            "size_in_sqm": 110,
+            "city": target_area,
+            "bedrooms": beds,
+            "bathrooms": baths,
+            "url": "https://example.com/listing5"
+        }
+    ]
+    return listings
+
+def market_scout_mock(area, max_budget, min_beds):
+    """
+    Simulates searching Bazaraki and BuySell for candidate properties.
+    """
+    candidates = [
+        {"title": f"Bazaraki: {min_beds}BR Flat in {area}", "price": max_budget - 15000, "description": f"Great {min_beds} bedroom property in {area}. Near shops. Bazaraki listing.", "city": area, "url": "https://bazaraki.com/1"},
+        {"title": f"BuySell: Modern House {area}", "price": max_budget - 5000, "description": f"Spacious {min_beds} bed house in {area}. BuySell exclusive.", "city": area, "url": "https://buysellcyprus.com/2"},
+        {"title": f"Bazaraki: Apartment {area}", "price": max_budget - 30000, "description": f"Cozy apartment in {area} with {min_beds} bedrooms. Prime location.", "city": area, "url": "https://bazaraki.com/3"},
+        {"title": f"BuySell: Investment Opportunity {area}", "price": max_budget - 45000, "description": f"Cheap {min_beds}BR property for renovation in {area}.", "city": area, "url": "https://buysellcyprus.com/4"},
+        {"title": f"Bazaraki: Luxury Stay {area}", "price": max_budget - 1000, "description": f"High-end {min_beds} bedroom residency in {area}.", "city": area, "url": "https://bazaraki.com/5"},
+    ]
+    return candidates
+
+def login_screen():
+    st.markdown("<h1 style='text-align: center;'>🏠 Real Estate AI Pro</h1>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        st.markdown("### Agent Login")
+        username = st.text_input("Username")
+        password = st.text_input("Password", type="password")
+        
+        if st.button("Login", use_container_width=True):
+            if username == "admin" and password == "cyprus2026":
+                st.session_state.logged_in = True
+                st.rerun()
+            else:
+                st.error("Invalid credentials. Access Denied.")
+
 def main():
+    if not st.session_state.get("logged_in", False):
+        login_screen()
+        return
+
+    if st.sidebar.button("Logout"):
+        st.session_state.logged_in = False
+        st.rerun()
+
     st.sidebar.title("Settings")
     target_language = st.sidebar.selectbox("Select Language / Γλώσσα / Язык", options=['English', 'Ελληνικά (Greek)', 'Русский (Russian)'])
 
     st.title("🏠 Cyprus Real Estate Valuation Agent")
-    
+
     listing_url = st.text_input("Listing URL (optional, e.g., Bazaraki link):", placeholder="https://www.bazaraki.com/adv/...")
     listing = st.text_area("Or paste your property listing here:", height=200, placeholder="e.g., 2 bedroom apartment in Limassol, 100 sqm, 2 bathrooms...")
-    
+
     uploaded_file = st.file_uploader("Upload Property Image (optional):", type=["png", "jpg", "jpeg"])
     property_image = None
     if uploaded_file is not None:
         property_image = Image.open(uploaded_file)
         st.image(property_image, caption="Uploaded Property Image", use_container_width=True)
 
-    tab1, tab2, tab3, tab_insider, tab_detective = st.tabs(['📋 Basic Overrides', '⚖️ Legal & Due Diligence', '🛠️ Technical Inspection', '🔑 Insider Intel', '🕵️ Detective Mode'])
+    tab1, tab2, tab3, tab_insider, tab_detective, tab_market, tab_scout = st.tabs(['📋 Basic Overrides', '⚖️ Legal & Due Diligence', '🛠️ Technical Inspection', '🔑 Insider Intel', '🕵️ Detective Mode', '🔍 Market Search', '🕵️ Market Scout'])
+
+    with tab_scout:
+        st.subheader("🕵️ Market Scout")
+        s_col1, s_col2, s_col3 = st.columns(3)
+        with s_col1:
+            scout_area = st.text_input("Scout Area", value="Engomi", key="scout_area")
+        with s_col2:
+            scout_budget = st.number_input("Max Budget (€)", min_value=0, value=300000, step=10000, key="scout_budget")
+        with s_col3:
+            scout_beds = st.number_input("Min Bedrooms", min_value=0, value=2, key="scout_beds")
+
+        if st.button("Start Scouting"):
+            with st.spinner("Scouting Bazaraki and BuySell..."):
+                candidates = market_scout_mock(scout_area, scout_budget, scout_beds)
+                scout_results = []
+
+                progress = st.progress(0)
+                for i, cand in enumerate(candidates):
+                    # Mock background evaluation
+                    m_state = SessionState()
+                    m_state.initial_description = cand['description']
+                    m_state.market_data = fetch_market_data(cand['city'])
+
+                    val_res = evaluate_valuation(m_state, target_language=target_language)
+
+                    scout_results.append({
+                        "Title": cand['title'],
+                        "Price (€)": cand['price'],
+                        "Final AI Score": val_res.get('score', 0),
+                        "Yield (%)": val_res.get('gross_rental_yield_percentage', 0),
+                        "Justification": val_res.get('justification', 'N/A'),
+                        "Full Report": val_res, # Keep for deep dive
+                        "Description": cand['description']
+                    })
+                    progress.progress((i + 1) / len(candidates))
+
+                # Sort by score descending
+                scout_results.sort(key=lambda x: x['Final AI Score'], reverse=True)
+                st.session_state.scout_results = scout_results
+
+        if "scout_results" in st.session_state:
+            df_scout = pd.DataFrame(st.session_state.scout_results)[["Title", "Price (€)", "Final AI Score", "Yield (%)"]]
+            st.table(df_scout)
+
+            # Why it's Ranked #1 Summary
+            top_res = st.session_state.scout_results[0]
+            st.success(f"### 🏆 Why it's Ranked #1: {top_res['Title']}")
+            st.write(top_res['Justification'])
+
+            st.divider()
+            st.subheader("Explore Candidates")
+            for i, res in enumerate(st.session_state.scout_results):
+                col_c1, col_c2 = st.columns([3, 1])
+                with col_c1:
+                    st.write(f"**{res['Title']}** - Score: {res['Final AI Score']}")
+                with col_c2:
+                    if st.button(f"Deep Dive #{i+1}", key=f"dd_{i}"):
+                        st.session_state.deep_dive_res = res
+
+            if "deep_dive_res" in st.session_state:
+                dd = st.session_state.deep_dive_res
+                with st.expander(f"🕵️ Deep Dive: {dd['Title']}", expanded=True):
+                    st.write(f"**Description:** {dd['Description']}")
+                    st.json(dd['Full Report'])
+                    if st.button("Close Deep Dive"):
+                        del st.session_state.deep_dive_res
+                        st.rerun()
+
+    with tab_market:
+
+        st.subheader("🔍 Market Search & Rank")
+        m_col1, m_col2 = st.columns(2)
+        with m_col1:
+            target_area = st.text_input("Target Area", value="Engomi")
+            beds = st.number_input("Beds", min_value=0, value=2)
+        with m_col2:
+            baths = st.number_input("Baths", min_value=0, value=2)
+            max_budget = st.number_input("Max Budget (€)", min_value=0, value=300000, step=10000)
+        
+        if st.button("Search & Rank"):
+            with st.spinner("Searching market portals..."):
+                results = mock_crawler(target_area, beds, baths, max_budget)
+                ranked_results = []
+                
+                progress_bar = st.progress(0)
+                for i, res in enumerate(results):
+                    # Create a dummy session state for evaluation
+                    m_state = SessionState()
+                    m_state.initial_description = res['description']
+                    m_state.market_data = fetch_market_data(res['city'])
+                    
+                    # Run valuation logic
+                    val_res = evaluate_valuation(m_state, target_language=target_language)
+                    
+                    ranked_results.append({
+                        "title": res['title'],
+                        "price": res['price'],
+                        "score": val_res.get('score', 0),
+                        "justification": val_res.get('justification', 'N/A'),
+                        "url": res['url']
+                    })
+                    progress_bar.progress((i + 1) / len(results))
+                
+                # Sort by score descending
+                ranked_results.sort(key=lambda x: x['score'], reverse=True)
+                
+                st.subheader("🏆 Value for Money Leaderboard")
+                for i, r in enumerate(ranked_results):
+                    with st.expander(f"#{i+1}: {r['title']} - Score: {r['score']}/100", expanded=i==0):
+                        st.write(f"**Price:** €{r['price']:,}")
+                        st.write(f"**AI Justification:** {r['justification']}")
+                        st.write(f"**Link:** [View Listing]({r['url']})")
+                
+                st.info("💡 Note: In the production version, this connects to a live multi-portal scraper.")
 
     with tab_detective:
         st.subheader("Visual Location Inference")

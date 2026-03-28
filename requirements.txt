@@ -10,3 +10,5 @@ typing-extensions
 Pillow
 googlemaps
 fpdf
+firecrawl-py
+pandas
