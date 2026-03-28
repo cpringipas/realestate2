@@ -292,12 +292,15 @@ def main():
 
     with tab1:
         # ... (basic overrides code)
+        pass
 
     with tab2:
         # ... (legal & due diligence code)
+        pass
 
     with tab3:
         # ... (technical inspection code)
+        pass
 
     with tab_insider:
         st.subheader("🔑 Agent Insider Intel")
