@@ -25,6 +25,7 @@ class NegotiationScripts(typing.TypedDict):
 class ValuationResult(typing.TypedDict):
     score: int
     justification: str
+    valuation_scorecard: str
     estimated_monthly_rent: typing.Optional[int]
     estimated_yearly_expenses: typing.Optional[int]
     gross_rental_yield_percentage: typing.Optional[float]
@@ -37,13 +38,38 @@ class ValuationResult(typing.TypedDict):
     location_intelligence_summary: typing.Optional[str]
     negotiation_scripts: NegotiationScripts
 
-def evaluate_valuation(session_memory, status_placeholder=None, retries=2, property_category="Residential", image=None, drive_times=None, title_deeds_status=None, vat_status=None, building_density=0, plot_size=0, structural_dampness=None, roof_waterproofing=None, mep_status=None, energy_efficiency=None, unauthorized_extensions=None, capex_estimate=0, developer_track_record=None, construction_stage=None, mep_climate_specs=None, solar_pv_system=None, planning_deviations=None, legal_doc_text=None, inspection_images=None, nearby_cafes=0, nearby_restaurants=0, nearby_parks=0, nearby_schools=0, nearby_supermarkets=0, target_language="English"):
+def evaluate_valuation(session_memory, status_placeholder=None, retries=2, property_category="Residential", image=None, drive_times=None, title_deeds_status=None, vat_status=None, building_density=0, plot_size=0, structural_dampness=None, roof_waterproofing=None, mep_status=None, energy_efficiency=None, unauthorized_extensions=None, capex_estimate=0, developer_track_record=None, construction_stage=None, mep_climate_specs=None, solar_pv_system=None, planning_deviations=None, legal_doc_text=None, inspection_images=None, nearby_cafes=0, nearby_restaurants=0, nearby_parks=0, nearby_schools=0, nearby_supermarkets=0, target_language="English", manual_street_vibe=5, motivation_notes=None, red_flag_notes=None, target_closing_price=0):
     """
     Evaluator with Router Pattern: Uses Gemini to analyze session memory and optional image based on property category.
     """
     if not api_key:
         return {"error": "GOOGLE_API_KEY not found. Please set it to use the Evaluator."}
     
+    insider_intel_instruction = (
+        "Insider Intel Overrides: You will be provided with specific Agent Motivation and Red Flag notes. "
+        "These MUST take absolute precedence over the listing description. "
+        "If 'Distress Sale' or 'Inheritance' is present in Motivation, you MUST lower your 'Realistic Closing Price' estimate by 10-15% below market average. "
+        "If 'Cash Only Required' is present in Red Flags, you MUST penalize the liquidity/investment score and mention the limited buyer pool. "
+        "If 'Suspected Damp Cover-up' is present in Red Flags, you MUST triple the CapEx estimate for 'Waterproofing' in your ROI calculations. "
+        "Always compare the AI's calculated value against the 'Agent's Target Closing Price' provided."
+    )
+
+    deductive_scoring_instruction = (
+        "Deductive Scoring Model: You must start every evaluation with a Baseline Score of 100. "
+        "For every flaw, risk, or missing premium feature, you must explicitly subtract points and state the reason (e.g., -10 for No Title Deeds). "
+        "For every high-end feature, you may add points. "
+        "STRICT VIBE LOGIC: You MUST subtract 5 points if the Manual Street Vibe is below 4. You MUST add 5 points if the Manual Street Vibe is 9 or 10. "
+        "You must output a field called 'valuation_scorecard' containing a section titled 🧮 THE VALUATION SCORECARD with a line-by-line breakdown of these additions and subtractions. "
+        "The final total must match the Final Score exactly."
+    )
+
+    vibe_logic_instruction = (
+        f"Street Vibe Source of Truth: The user has provided a Manual Street Vibe of {manual_street_vibe}/10. "
+        "You MUST use this value as the absolute source of truth for the local environment. "
+        f"If the value is exactly 5 (default) AND your visual/data-driven confidence in the location is LOW, you MUST add a warning in the ⚠️ CLARIFICATION NEEDED section: "
+        "'[VIBE UNCERTAIN: Please manually rate the street vibe (1-10) to refine the valuation].'"
+    )
+
     pr_law = (
         "Cyprus PR Immigration Law: You must determine if this property qualifies for the Cyprus Fast-Track Permanent Residency. "
         "The strict rules are: The purchase price must be €300,000 or higher, AND the property MUST be a brand new build (or off-plan/under construction). "
@@ -127,7 +153,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
             "Aggressively hunt for 'Area market analysis' or 'Average price per m2' for land in the scraped text to fill market_avg_price_per_sqm. "
             "If missing, estimate it based on the city and zoning potential. "
             "If an image is provided, analyze the terrain, access roads, and neighboring structures to verify the description.\n"
-            + strict_rule + "\n" + pr_law + "\n" + location_intel_instruction + "\n" + neighborhood_vibe_instruction + "\n" + agent_override_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction + "\n" + translation_instruction + "\n" + negotiation_instruction + "\n" + cyprus_market_benchmarks_instruction
+            + deductive_scoring_instruction + "\n" + vibe_logic_instruction + "\n" + insider_intel_instruction + "\n" + strict_rule + "\n" + pr_law + "\n" + location_intel_instruction + "\n" + neighborhood_vibe_instruction + "\n" + agent_override_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction + "\n" + translation_instruction + "\n" + negotiation_instruction + "\n" + cyprus_market_benchmarks_instruction
         )
     else: # Default to Residential or Commercial
         system_instruction = (
@@ -143,7 +169,7 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
             "If missing, estimate it based on the city and property type (e.g. Limassol apartments avg ~4500/sqm). "
             "If an image is provided, analyze the visual condition of the property. Brutally penalize the score if the image shows mold, "
             "deterioration, or poor maintenance that the marketing text tries to hide or downplay.\n"
-            + strict_rule + "\n" + pr_law + "\n" + location_intel_instruction + "\n" + neighborhood_vibe_instruction + "\n" + agent_override_instruction + "\n" + technical_assessment_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction + "\n" + translation_instruction + "\n" + negotiation_instruction + "\n" + cyprus_market_benchmarks_instruction
+            + deductive_scoring_instruction + "\n" + vibe_logic_instruction + "\n" + insider_intel_instruction + "\n" + strict_rule + "\n" + pr_law + "\n" + location_intel_instruction + "\n" + neighborhood_vibe_instruction + "\n" + agent_override_instruction + "\n" + technical_assessment_instruction + "\n" + new_build_assessment_instruction + "\n" + multimodal_instruction + "\n" + translation_instruction + "\n" + negotiation_instruction + "\n" + cyprus_market_benchmarks_instruction
         )
 
     # Retrieve legal facts from RAG
@@ -161,7 +187,11 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     - Agent Condition Rating: {getattr(session_memory, 'condition_rating', 5)}/10
     - Agent Finish Rating: {getattr(session_memory, 'finish_rating', 5)}/10
     - Agent Location Rating: {getattr(session_memory, 'location_rating', 5)}/10
+    - Manual Street Vibe: {manual_street_vibe}/10
     - Agent Insider Knowledge: {getattr(session_memory, 'insider_knowledge', 'None provided')}
+    - Agent Motivation Intel: {motivation_notes if motivation_notes else 'None provided'}
+    - Agent Red Flag Intel: {red_flag_notes if red_flag_notes else 'None provided'}
+    - Agent's Target Closing Price: €{target_closing_price}
     - Title Deeds Status: {title_deeds_status if title_deeds_status else 'Unknown'}
     - VAT Status: {vat_status if vat_status else 'Unknown'}
     - Building Density / Coefficient (%): {building_density}
@@ -196,19 +226,21 @@ def evaluate_valuation(session_memory, status_placeholder=None, retries=2, prope
     TASK:
     1. Analyze the listing price against market potential.
     2. Factor in the user's clarifications and agent's ratings.
-    3. Calculate a valuation score from 1 to 100.
-    4. For Land: Focus on Building Density and Coverage. For Residential: Estimate rent and yield.
-    5. Estimate yearly operating expenses (communal, taxes, maintenance).
-    6. Calculate listing_price_per_sqm (Total Price / Total Size).
-    7. Extract or estimate market_avg_price_per_sqm for this specific area/type.
-    8. Recommend the best investment strategy.
-    9. List any legal/financial red flags (VAT, Title Deeds, Zoning, etc. and Technical Risks).
-    10. Generate a legal_disclaimer aggressively warning about Cyprus-specific risks.
-    11. Determine PR eligibility status based on the Cyprus PR Immigration Law.
-    12. Include a summary of drive times in 'location_intelligence_summary' and ensure they are used in the score and justification as instructed.
-    13. Analyze amenity counts and reflect their impact on the score and justification as per the Neighborhood Vibe & Walkability instructions.
-    14. Write three negotiation scripts (polite, professional, savage) based on the negotiation instructions.
-    15. If Building Density and Plot Size are provided (>0), calculate the 'Maximum Build Capacity' (Plot Size * Building Density / 100) and compare it to the current house size to find Hidden Development Potential.
+    3. Calculate a valuation score from 1 to 100 using the Deductive Scoring Model.
+    4. Generate 'valuation_scorecard' with a line-by-line breakdown starting from 100.
+    5. For Land: Focus on Building Density and Coverage. For Residential: Estimate rent and yield.
+    6. Estimate yearly operating expenses (communal, taxes, maintenance).
+    7. Calculate listing_price_per_sqm (Total Price / Total Size).
+    8. Extract or estimate market_avg_price_per_sqm for this specific area/type.
+    9. Recommend the best investment strategy.
+    10. List any legal/financial red flags (VAT, Title Deeds, Zoning, etc. and Technical Risks).
+    11. Generate a legal_disclaimer aggressively warning about Cyprus-specific risks.
+    12. Determine PR eligibility status based on the Cyprus PR Immigration Law.
+    13. Include a summary of drive times in 'location_intelligence_summary' and ensure they are used in the score and justification as instructed.
+    14. Analyze amenity counts and reflect their impact on the score and justification as per the Neighborhood Vibe & Walkability instructions.
+    15. Write three negotiation scripts (polite, professional, savage) based on the negotiation instructions.
+    16. If Building Density and Plot Size are provided (>0), calculate the 'Maximum Build Capacity' (Plot Size * Building Density / 100) and compare it to the current house size to find Hidden Development Potential.
+    17. Compare your valuation with the Agent's Target Closing Price and comment on the gap.
     
     IMPORTANT: You MUST base your legal warnings and VAT math strictly on the Verified Context provided.
     

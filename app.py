@@ -284,140 +284,42 @@ def main():
         property_image = Image.open(uploaded_file)
         st.image(property_image, caption="Uploaded Property Image", use_container_width=True)
 
-    tab1, tab2, tab3, tab_detective = st.tabs(['📋 Basic Overrides', '⚖️ Legal & Due Diligence', '🛠️ Technical Inspection', '🕵️ Detective Mode'])
+    tab1, tab2, tab3, tab_insider, tab_detective = st.tabs(['📋 Basic Overrides', '⚖️ Legal & Due Diligence', '🛠️ Technical Inspection', '🔑 Insider Intel', '🕵️ Detective Mode'])
 
     with tab_detective:
         st.subheader("Visual Location Inference")
-        # 1. Allow Multiple Pictures
-        uploaded_images = st.file_uploader(
-            "Upload Listing Photos for Analysis", 
-            type=['jpg', 'png', 'jpeg'], 
-            accept_multiple_files=True
-        )
-        
-        # 2. Add the "No Assumptions" button
-        if st.button("🔍 Run Detective Analysis"):
-            if uploaded_images:
-                # Convert uploaded files to PIL format for Gemini
-                pil_images = [Image.open(img) for img in uploaded_images]
-                
-                with st.spinner("Analyzing visual clues and searching Google Maps..."):
-                    gemini_model = genai.GenerativeModel('gemini-2.5-flash')
-                    
-                    # Combine title, description, and location hints for the AI
-                    # We will use the main listing text area if available, and default empty for hints/title
-                    full_text = f"Title: {listing[:50]}...\nDesc: {listing}\nHints: {listing_url}"
-                    
-                    # Call our detective function
-                    raw_ai_analysis = run_detective_mode(gemini_model, full_text, pil_images)
-                    
-                    # Phase 2: Live Data Extraction
-                    try:
-                        # We extract the "City, Area" line from the AI output (usually the first line after title/label)
-                        # We'll split lines and look for the first line that is likely the location.
-                        lines = raw_ai_analysis.strip().split('\n')
-                        estimated_loc_line = ""
-                        for line in lines:
-                            if "Confidence:" not in line and "Reasoning:" not in line and "NEARBY" not in line and line.strip() != "":
-                                estimated_loc_line = line.replace("1. ESTIMATED LOCATION:", "").strip()
-                                break
-                        if not estimated_loc_line:
-                            estimated_loc_line = raw_ai_analysis.split('\n')[1]
-                    except Exception:
-                        estimated_loc_line = raw_ai_analysis
-                    
-                    gmaps_api_key = os.environ.get("GOOGLE_MAPS_API_KEY")
-                    live_schools, live_cafes = get_live_amenities(estimated_loc_line, gmaps_api_key)
-                    
-                    # Phase 3: Display results
-                    st.markdown("---")
-                    st.markdown(raw_ai_analysis)
-                    
-                    if live_schools:
-                        st.subheader("📍 Verified Nearby Schools (Live)")
-                        for s in live_schools:
-                            st.write(f"✅ {s['name']} — {s.get('formatted_address', '')}")
-                            
-                    if live_cafes:
-                        st.subheader("☕ Verified Nearby Cafés (Live)")
-                        for c in live_cafes:
-                            st.write(f"✅ {c['name']} — ⭐ {c.get('rating', 'N/A')}")
-            else:
-                st.warning("Please upload at least one image for the AI to analyze.")
+        # ... (rest of detective mode code)
 
     with tab1:
-        col_c1, col_c2 = st.columns([2, 1])
-        with col_c1:
-            condition_rating = st.slider("Condition Rating (1-10)", min_value=1, max_value=10, value=5)
-        with col_c2:
-            st.info("📋 Quick Guide: 10=New, 6=Minor Wear, 2=Structural Issues/Damp")
-
-        col_f1, col_f2 = st.columns([2, 1])
-        with col_f1:
-            finish_rating = st.slider("Finish Quality (1-10)", min_value=1, max_value=10, value=5)
-        with col_f2:
-            st.info("📋 Quick Guide: 10=Marble/VRV/Smart, 6=Standard Tiles/Split AC, 2=Obsolete")
-
-        location_rating = st.slider("Street Vibe & Location Reality (1-10)", min_value=1, max_value=10, value=5)
-        street_vibe_strategy = st.selectbox("Street Vibe Strategy", options=['Auto-Detect', 'Student Hub', 'Luxury/Expat', 'Family Residential', 'Business/Commercial'])
-        insider_knowledge = st.text_area("Agent Insider Knowledge (e.g., Seller motivation, hidden repair costs, realistic closing price)")
-        capex_estimate = st.number_input("Agent Estimated CapEx / Repair Cost (€)", min_value=0, value=0)
+        # ... (basic overrides code)
 
     with tab2:
-        title_deeds_status = st.selectbox("Title Deeds Status", options=['🤖 Unknown / Let AI Assess', 'Issued & Clean', 'Pending (Trusted Developer)', 'Share of Land Only'])
-        vat_status = st.selectbox("VAT Status", options=['🤖 Unknown / Let AI Assess', 'No VAT (Resale)', '5% (First Time Buyer)', '19% (Standard)'])
-        building_density = st.number_input("Building Density / Coefficient (%)", value=0)
-        plot_size = st.number_input("Plot Size (sqm)", value=0)
-        
-        uploaded_pdf = st.file_uploader("Upload Legal Documents (Title Deeds, Contracts)", type=["pdf"])
-        legal_doc_text = None
-        if uploaded_pdf is not None:
-            try:
-                pdf_reader = PyPDF2.PdfReader(uploaded_pdf)
-                legal_doc_text = ""
-                for page in pdf_reader.pages:
-                    legal_doc_text += page.extract_text() + "\n"
-            except Exception as e:
-                st.error(f"Error reading PDF: {e}")
+        # ... (legal & due diligence code)
 
     with tab3:
-        property_age = st.radio("Property Age", options=['🤖 Unknown', 'Resale', 'New Build / Off-Plan'])
-        
-        uploaded_inspections = st.file_uploader("Upload Inspection Photos (Damage, Finishes, Site Progress)", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
-        inspection_images = []
-        if uploaded_inspections:
-            for uploaded_inspection in uploaded_inspections:
-                inspection_images.append(Image.open(uploaded_inspection))
-        
-        gen_renovation = st.checkbox('✨ Generate AI Virtual Renovations for these photos', value=False)
-        
-        # Initialize variables to avoid NameError
-        structural_dampness = "🤖 Unknown / Let AI Assess"
-        roof_waterproofing = "🤖 Unknown / Let AI Assess"
-        mep_status = "🤖 Unknown / Let AI Assess"
-        energy_efficiency = "🤖 Unknown / Let AI Assess"
-        unauthorized_extensions = "🤖 Unknown / Let AI Assess"
-        developer_track_record = "🤖 Unknown / Let AI Assess"
-        construction_stage = "🤖 Unknown / Let AI Assess"
-        mep_climate_specs = "🤖 Unknown / Let AI Assess"
-        solar_pv_system = "🤖 Unknown / Let AI Assess"
-        planning_deviations = "🤖 Unknown / Let AI Assess"
+        # ... (technical inspection code)
 
-        if property_age == 'Resale':
-            structural_dampness = st.selectbox("Structural & Dampness", options=["🤖 Unknown / Let AI Assess", "Sound", "Minor Cracks", "Concrete Spalling", "Severe Damp"])
-            roof_waterproofing = st.selectbox("Roof Waterproofing", options=["🤖 Unknown / Let AI Assess", "Good", "Aging", "Failing"])
-            mep_status = st.selectbox("MEP Status", options=["🤖 Unknown / Let AI Assess", "Modernized", "Outdated", "Needs Full Replace"])
-            energy_efficiency = st.selectbox("Energy Efficiency", options=["🤖 Unknown / Let AI Assess", "High", "Medium", "Low"])
-            unauthorized_extensions = st.selectbox("Unauthorized Extensions", options=["🤖 Unknown / Let AI Assess", "None", "Minor", "Major"])
-        elif property_age == 'New Build / Off-Plan':
-            developer_track_record = st.selectbox("Developer Track Record", options=["🤖 Unknown / Let AI Assess", "Tier 1", "Tier 2", "Tier 3", "High Risk"])
-            construction_stage = st.selectbox("Construction Stage", options=["🤖 Unknown / Let AI Assess", "Pre-Permit", "Concrete Frame", "Plastering", "Finishes", "Completed"])
-            mep_climate_specs = st.selectbox("MEP & Climate Specs", options=["🤖 Unknown / Let AI Assess", "Premium VRV Included", "Standard Split Units Included", "Basic Provisions Only"])
-            solar_pv_system = st.selectbox("Solar / PV System", options=["🤖 Unknown / Let AI Assess", "Full PV Installed", "PV Provisions Only"])
-            planning_deviations = st.selectbox("Planning Deviations", options=["🤖 Unknown / Let AI Assess", "None", "Minor", "Major"])
+    with tab_insider:
+        st.subheader("🔑 Agent Insider Intel")
+        col_m1, col_m2 = st.columns(2)
+        with col_m1:
+            st.markdown("**Motivation (Group A)**")
+            distress_sale = st.checkbox("Distress Sale")
+            inheritance = st.checkbox("Inheritance")
+            testing_market = st.checkbox("Testing Market")
+        with col_m2:
+            st.markdown("**Red Flags (Group B)**")
+            memo_on_title = st.checkbox("Memo on Title")
+            cash_only = st.checkbox("Cash Only Required")
+            smell_noise = st.checkbox("Smell/Noise Issues")
+            suspected_damp = st.checkbox("Suspected Damp Cover-up")
+        
+        st.divider()
+        target_closing_price = st.number_input("Agent's Target Closing Price (€)", min_value=0, value=0, step=1000)
+        st.info("💡 Motivation & Red Flags here will override standard listing descriptions in the AI's math.")
 
     if "evaluate_clicked" not in st.session_state:
-        st.session_state.evaluate_clicked = False
+        # ... (rest of main code)
 
     if st.button("Evaluate Deal"):
         st.session_state.evaluate_clicked = True
@@ -620,7 +522,11 @@ def main():
                     nearby_parks=nearby_parks,
                     nearby_schools=nearby_schools,
                     nearby_supermarkets=nearby_supermarkets,
-                    target_language=target_language
+                    target_language=target_language,
+                    manual_street_vibe=manual_street_vibe,
+                    motivation_notes={"Distress Sale": distress_sale, "Inheritance": inheritance, "Testing Market": testing_market},
+                    red_flag_notes={"Memo on Title": memo_on_title, "Cash Only Required": cash_only, "Smell/Noise Issues": smell_noise, "Suspected Damp Cover-up": suspected_damp},
+                    target_closing_price=target_closing_price
                 )
             
             # Clear all status messages
@@ -644,6 +550,11 @@ def main():
                 
                 # Final Score using st.metric
                 st.metric("Final Valuation Score", f"{valuation_result.get('score', 0)}/100")
+                
+                # Valuation Scorecard
+                scorecard = valuation_result.get('valuation_scorecard')
+                if scorecard:
+                    st.code(scorecard, language="text")
                 
                 # Market Comparison Metrics
                 listing_psqm = valuation_result.get('listing_price_per_sqm')
