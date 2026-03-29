@@ -501,15 +501,52 @@ def main():
     with tab_detective:
         st.subheader("Visual Location Inference")
         # ... (rest of detective mode code)
+        pass
 
     with tab1:
-        # ... (basic overrides code)
+        st.subheader("📋 Basic Overrides")
+        condition_rating = st.slider("Condition Rating (1-10)", 1, 10, 5)
+        finish_rating = st.slider("Finish Quality Rating (1-10)", 1, 10, 5)
+        location_rating = st.slider("Location Rating (1-10)", 1, 10, 5)
+        insider_knowledge = st.text_area("Additional Insider Knowledge:", placeholder="e.g., Owner is motivated, property has been on market for 6 months...")
 
     with tab2:
-        # ... (legal & due diligence code)
+        st.subheader("⚖️ Legal & Due Diligence")
+        title_deeds_status = st.selectbox("Title Deeds Status", ["Unknown (AI assumes risk)", "Clean Title Deeds", "Separate Title Deeds Pending", "No Title Deeds"])
+        vat_status = st.selectbox("VAT Status", ["Unknown", "VAT Applicable (19%)", "VAT Exempt (Resale)", "Reduced VAT (5%)"])
+        building_density = st.text_input("Building Density / Coverage Ratio:", placeholder="e.g., 60% coverage, 4 floors")
+        plot_size = st.number_input("Plot Size (sqm, if applicable):", min_value=0, value=0, step=10)
+        developer_track_record = st.text_input("Developer Track Record:", placeholder="e.g., Reputable developer, 10+ years in Cyprus")
+        construction_stage = st.selectbox("Construction Stage", ["Completed / Resale", "Off-Plan", "Under Construction", "Shell"])
+        planning_deviations = st.text_area("Known Planning Deviations / Encroachments:", placeholder="e.g., Illegal extension on roof...")
+        legal_doc_text = ""
+        uploaded_legal_doc = st.file_uploader("Upload Legal Document (PDF, optional):", type=["pdf"])
+        if uploaded_legal_doc is not None:
+            try:
+                pdf_reader = PyPDF2.PdfReader(uploaded_legal_doc)
+                for page in pdf_reader.pages:
+                    legal_doc_text += page.extract_text() or ""
+                st.success(f"Legal document loaded ({len(pdf_reader.pages)} pages).")
+            except Exception as e:
+                st.error(f"Could not read PDF: {e}")
 
     with tab3:
-        # ... (technical inspection code)
+        st.subheader("🛠️ Technical Inspection")
+        structural_dampness = st.selectbox("Structural Dampness", ["None Observed", "Minor (Cosmetic)", "Moderate (Needs Treatment)", "Severe (Structural Risk)"])
+        roof_waterproofing = st.selectbox("Roof Waterproofing", ["Good Condition", "Minor Repairs Needed", "Major Repairs Needed", "Unknown"])
+        mep_status = st.selectbox("MEP Systems (Mechanical, Electrical, Plumbing)", ["Modern & Compliant", "Functional but Aging", "Needs Upgrade", "Unknown"])
+        energy_efficiency = st.selectbox("Energy Efficiency Rating", ["A", "B", "C", "D", "E", "F", "G", "Unknown"])
+        unauthorized_extensions = st.checkbox("Unauthorized Extensions Present")
+        capex_estimate = st.number_input("Estimated CAPEX for Repairs/Renovation (€):", min_value=0, value=0, step=500)
+        mep_climate_specs = st.text_input("Climate Control Specs:", placeholder="e.g., VRV A/C system, underfloor heating")
+        solar_pv_system = st.checkbox("Solar PV System Installed")
+        manual_street_vibe = st.selectbox("Street Vibe / Neighbourhood Feel", ["Premium / Quiet", "Good / Residential", "Average / Mixed Use", "Below Average / Noisy", "Unknown"])
+        gen_renovation = st.checkbox("Generate AI Virtual Renovation Showcase (uses inspection images)")
+        inspection_images = []
+        uploaded_inspection = st.file_uploader("Upload Inspection Photos (optional, multiple):", type=["png", "jpg", "jpeg"], accept_multiple_files=True)
+        if uploaded_inspection:
+            for img_file in uploaded_inspection:
+                inspection_images.append(Image.open(img_file))
 
     with tab_insider:
         st.subheader("🔑 Agent Insider Intel")
@@ -531,7 +568,7 @@ def main():
         st.info("💡 Motivation & Red Flags here will override standard listing descriptions in the AI's math.")
 
     if "evaluate_clicked" not in st.session_state:
-        # ... (rest of main code)
+        st.session_state.evaluate_clicked = False
 
     if st.button("Evaluate Deal"):
         st.session_state.evaluate_clicked = True
