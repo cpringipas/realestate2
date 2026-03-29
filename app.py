@@ -335,11 +335,13 @@ def market_scout_mock(area, max_budget, min_beds):
     Simulates searching Bazaraki and BuySell for candidate properties.
     """
     candidates = [
-        {"title": f"Bazaraki: {min_beds}BR Flat in {area}", "price": max_budget - 15000, "description": f"Great {min_beds} bedroom property in {area}. Near shops. Bazaraki listing.", "city": area, "url": "https://bazaraki.com/1"},
-        {"title": f"BuySell: Modern House {area}", "price": max_budget - 5000, "description": f"Spacious {min_beds} bed house in {area}. BuySell exclusive.", "city": area, "url": "https://buysellcyprus.com/2"},
-        {"title": f"Bazaraki: Apartment {area}", "price": max_budget - 30000, "description": f"Cozy apartment in {area} with {min_beds} bedrooms. Prime location.", "city": area, "url": "https://bazaraki.com/3"},
-        {"title": f"BuySell: Investment Opportunity {area}", "price": max_budget - 45000, "description": f"Cheap {min_beds}BR property for renovation in {area}.", "city": area, "url": "https://buysellcyprus.com/4"},
-        {"title": f"Bazaraki: Luxury Stay {area}", "price": max_budget - 1000, "description": f"High-end {min_beds} bedroom residency in {area}.", "city": area, "url": "https://bazaraki.com/5"},
+        {"title": f"Bazaraki: {min_beds}BR Flat in {area}", "price": max_budget - 15000, "description": f"Great {min_beds} bedroom property in {area}. Near shops. Bazaraki listing.", "city": area, "url": "https://bazaraki.com/1", "size_in_sqm": 95},
+        {"title": f"BuySell: Modern House {area}", "price": max_budget - 5000, "description": f"Spacious {min_beds} bed house in {area}. BuySell exclusive.", "city": area, "url": "https://buysellcyprus.com/2", "size_in_sqm": 150},
+        {"title": f"Bazaraki: Apartment {area}", "price": max_budget - 30000, "description": f"Cozy apartment in {area} with {min_beds} bedrooms. Prime location.", "city": area, "url": "https://bazaraki.com/3", "size_in_sqm": 85},
+        {"title": f"BuySell: Investment Opportunity {area}", "price": max_budget - 45000, "description": f"Cheap {min_beds}BR property for renovation in {area}.", "city": area, "url": "https://buysellcyprus.com/4", "size_in_sqm": 70},
+        {"title": f"Bazaraki: Luxury Stay {area}", "price": max_budget - 1000, "description": f"High-end {min_beds} bedroom residency in {area}.", "city": area, "url": "https://bazaraki.com/5", "size_in_sqm": 130},
+        {"title": f"Bazaraki: Missing Data Listing", "price": 0, "description": "Suspiciously free property.", "city": area, "url": "https://bazaraki.com/6", "size_in_sqm": 100},
+        {"title": f"BuySell: Unknown Size Listing", "price": 200000, "description": "Size is not mentioned.", "city": area, "url": "https://buysellcyprus.com/7", "size_in_sqm": None},
     ]
     return candidates
 
@@ -396,7 +398,14 @@ def main():
 
         if st.button("Start Scouting"):
             with st.spinner("Scouting Bazaraki and BuySell..."):
-                candidates = market_scout_mock(scout_area, scout_budget, scout_beds)
+                all_candidates = market_scout_mock(scout_area, scout_budget, scout_beds)
+                
+                # Quality Filter: Discard price 0 or Unknown size
+                candidates = [
+                    c for c in all_candidates 
+                    if c.get("price", 0) > 0 and c.get("size_in_sqm") is not None and c.get("size_in_sqm") != "Unknown"
+                ]
+                
                 scout_results = []
 
                 progress = st.progress(0)
@@ -421,23 +430,41 @@ def main():
 
                 # Sort by score descending
                 scout_results.sort(key=lambda x: x['Final AI Score'], reverse=True)
-                st.session_state.scout_results = scout_results
+                st.session_state.scout_results = scout_results[:5] # Keep Top 5
 
         if "scout_results" in st.session_state:
-            df_scout = pd.DataFrame(st.session_state.scout_results)[["Title", "Price (€)", "Final AI Score", "Yield (%)"]]
+            results = st.session_state.scout_results
+            
+            # Logic: If best available are low-quality, show warning instead of trophy
+            all_low_quality = all(r['Final AI Score'] < 50 for r in results) if results else True
+            
+            if all_low_quality:
+                st.warning("⚠️ No high-value deals found matching your criteria. Showing the best of the available low-data listings.")
+            
+            df_scout = pd.DataFrame(results)[["Title", "Price (€)", "Final AI Score", "Yield (%)"]]
             st.table(df_scout)
 
-            # Why it's Ranked #1 Summary
-            top_res = st.session_state.scout_results[0]
-            st.success(f"### 🏆 Why it's Ranked #1: {top_res['Title']}")
-            st.write(top_res['Justification'])
+            if results:
+                top_res = results[0]
+                # Data Validation: If score < 40, do not rank as #1, label as High Risk
+                if top_res['Final AI Score'] < 40:
+                    st.error(f"### 🚩 High Risk Candidate: {top_res['Title']}")
+                    st.write("This property has a very low AI score and is considered a high-risk investment.")
+                else:
+                    if not all_low_quality:
+                        st.success(f"### 🏆 Why it's Ranked #1: {top_res['Title']}")
+                    else:
+                        st.subheader(f"Best of Available: {top_res['Title']}")
+                
+                st.write(top_res['Justification'])
 
             st.divider()
             st.subheader("Explore Candidates")
-            for i, res in enumerate(st.session_state.scout_results):
+            for i, res in enumerate(results):
                 col_c1, col_c2 = st.columns([3, 1])
                 with col_c1:
-                    st.write(f"**{res['Title']}** - Score: {res['Final AI Score']}")
+                    label = "High Risk Candidate" if res['Final AI Score'] < 40 else f"Score: {res['Final AI Score']}"
+                    st.write(f"**{res['Title']}** - {label}")
                 with col_c2:
                     if st.button(f"Deep Dive #{i+1}", key=f"dd_{i}"):
                         st.session_state.deep_dive_res = res
